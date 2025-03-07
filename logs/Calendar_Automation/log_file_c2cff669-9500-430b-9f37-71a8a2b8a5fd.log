@@ -1,0 +1,61 @@
+2025-03-07 14:31:04,344 - __main__ - INFO - Starting the main function
+2025-03-07 14:31:04,344 - __main__ - INFO - Attempting to collect input from Monday...
+2025-03-07 14:31:04,344 - get_input_flow - INFO - starting to collect input from monday
+2025-03-07 14:31:08,427 - get_input_flow - INFO - formatting timespans
+2025-03-07 14:31:08,427 - get_input_flow - INFO - name: אריה מיסיחייב 	 start_date: 2025-03-09 	 days_list: [None, None, None, '"19:00:00-21:30:00"', None, None, '{"index":5,"post_id":null,"changed_at":"2025-03-06T12:07:07.442Z"}', '{"text":"","changed_at":"2025-03-06T12:06:44.752Z"}', '"1"', '{}']
+2025-03-07 14:31:08,428 - get_input_flow - INFO - [None, None, None, '19:00:00-21:30:00', None, None]
+2025-03-07 14:31:08,428 - get_input_flow - INFO - fixed_days_list: [None, None, None, '19:00:00-21:30:00', None, None]
+2025-03-07 14:31:08,428 - get_input_flow - INFO - start date: 2025-03-09, times string: 19:00:00-21:30:00, day_index: 3
+2025-03-07 14:31:08,431 - get_input_flow - INFO - 19:00:00-21:30:00
+2025-03-07 14:31:08,431 - get_input_flow - INFO - {'2025-03-09': [{'id': '1680614077', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': []}, {'day': 'Monday', 'time_frames': []}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': [{'start': '2025-03-12T19:00:00', 'end': '2025-03-12T21:30:00'}]}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}]}
+2025-03-07 14:31:08,431 - get_input_flow - INFO - name: בן נח 	 start_date: 2025-03-09 	 days_list: ['"20:00:00-22:30:00"', '"20:00:00-22:30:00"', '"20:00:00-22:30:00"', None, None, None, '{"index":1,"changed_at":"2025-03-06T12:14:22.059Z"}', '{"text":"ראשון: \\nמשעה 20:00\\n\\nשני: \\nמשעה 20:00\\n\\nשלישי: \\nמשעה 20:00\\n\\nרביעי: \\n\\n\\nחמישי: \\n\\n\\nשישי: \\n","changed_at":"2025-02-26T14:59:57.105Z"}', None, '{}']
+2025-03-07 14:31:08,431 - get_input_flow - INFO - ['20:00:00-22:30:00', '20:00:00-22:30:00', '20:00:00-22:30:00', None, None, None]
+2025-03-07 14:31:08,431 - get_input_flow - INFO - fixed_days_list: ['20:00:00-22:30:00', '20:00:00-22:30:00', '20:00:00-22:30:00', None, None, None]
+2025-03-07 14:31:08,431 - get_input_flow - INFO - start date: 2025-03-09, times string: 20:00:00-22:30:00, day_index: 0
+2025-03-07 14:31:08,431 - get_input_flow - INFO - 20:00:00-22:30:00
+2025-03-07 14:31:08,431 - get_input_flow - INFO - start date: 2025-03-09, times string: 20:00:00-22:30:00, day_index: 1
+2025-03-07 14:31:08,431 - get_input_flow - INFO - 20:00:00-22:30:00
+2025-03-07 14:31:08,431 - get_input_flow - INFO - start date: 2025-03-09, times string: 20:00:00-22:30:00, day_index: 2
+2025-03-07 14:31:08,431 - get_input_flow - INFO - 20:00:00-22:30:00
+2025-03-07 14:31:08,431 - get_input_flow - INFO - {'2025-03-09': [{'id': '1680614077', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': []}, {'day': 'Monday', 'time_frames': []}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': [{'start': '2025-03-12T19:00:00', 'end': '2025-03-12T21:30:00'}]}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}, {'id': '1680659023', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': [{'start': '2025-03-09T20:00:00', 'end': '2025-03-09T22:30:00'}]}, {'day': 'Monday', 'time_frames': [{'start': '2025-03-10T20:00:00', 'end': '2025-03-10T22:30:00'}]}, {'day': 'Tuesday', 'time_frames': [{'start': '2025-03-11T20:00:00', 'end': '2025-03-11T22:30:00'}]}, {'day': 'Wednesday', 'time_frames': []}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}]}
+2025-03-07 14:31:08,431 - get_input_flow - INFO - name: משה נוסוייב 	 start_date: 2025-03-09 	 days_list: [None, None, None, None, None, '"14:00:00"', '{"index":1,"changed_at":"2025-03-06T12:14:26.318Z"}', '{"text":"ראשון: \\n\\n\\nשני: \\n\\n\\nשלישי: \\n\\n\\nרביעי: \\n\\n\\nחמישי: \\n\\n\\nשישי: \\n14.00","changed_at":"2025-03-06T19:14:54.610Z"}', '"1"', '{}']
+2025-03-07 14:31:08,431 - get_input_flow - INFO - [None, None, None, None, None, '14:00:00-16:00:00']
+2025-03-07 14:31:08,431 - get_input_flow - INFO - fixed_days_list: [None, None, None, None, None, '14:00:00-16:00:00']
+2025-03-07 14:31:08,431 - get_input_flow - INFO - start date: 2025-03-09, times string: 14:00:00-16:00:00, day_index: 5
+2025-03-07 14:31:08,432 - get_input_flow - INFO - 14:00:00-16:00:00
+2025-03-07 14:31:08,432 - get_input_flow - INFO - {'2025-03-09': [{'id': '1680614077', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': []}, {'day': 'Monday', 'time_frames': []}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': [{'start': '2025-03-12T19:00:00', 'end': '2025-03-12T21:30:00'}]}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}, {'id': '1680659023', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': [{'start': '2025-03-09T20:00:00', 'end': '2025-03-09T22:30:00'}]}, {'day': 'Monday', 'time_frames': [{'start': '2025-03-10T20:00:00', 'end': '2025-03-10T22:30:00'}]}, {'day': 'Tuesday', 'time_frames': [{'start': '2025-03-11T20:00:00', 'end': '2025-03-11T22:30:00'}]}, {'day': 'Wednesday', 'time_frames': []}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}, {'id': '1680707276', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': []}, {'day': 'Monday', 'time_frames': []}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': []}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': [{'start': '2025-03-14T14:00:00', 'end': '2025-03-14T16:00:00'}]}]}]}
+2025-03-07 14:31:08,432 - get_input_flow - INFO - name: אייל כהן 	 start_date: 2025-03-09 	 days_list: ['"17:00:00-22:00:00"', '"17:00:00-22:00:00"', None, '"17:00:00-22:00:00"', None, None, '{"index":1,"changed_at":"2025-03-06T12:14:30.415Z"}', '{"text":null}', None, '{}']
+2025-03-07 14:31:08,432 - get_input_flow - INFO - ['17:00:00-22:00:00', '17:00:00-22:00:00', None, '17:00:00-22:00:00', None, None]
+2025-03-07 14:31:08,432 - get_input_flow - INFO - fixed_days_list: ['17:00:00-22:00:00', '17:00:00-22:00:00', None, '17:00:00-22:00:00', None, None]
+2025-03-07 14:31:08,432 - get_input_flow - INFO - start date: 2025-03-09, times string: 17:00:00-22:00:00, day_index: 0
+2025-03-07 14:31:08,432 - get_input_flow - INFO - 17:00:00-22:00:00
+2025-03-07 14:31:08,432 - get_input_flow - INFO - start date: 2025-03-09, times string: 17:00:00-22:00:00, day_index: 1
+2025-03-07 14:31:08,432 - get_input_flow - INFO - 17:00:00-22:00:00
+2025-03-07 14:31:08,432 - get_input_flow - INFO - start date: 2025-03-09, times string: 17:00:00-22:00:00, day_index: 3
+2025-03-07 14:31:08,432 - get_input_flow - INFO - 17:00:00-22:00:00
+2025-03-07 14:31:08,432 - get_input_flow - INFO - {'2025-03-09': [{'id': '1680614077', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': []}, {'day': 'Monday', 'time_frames': []}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': [{'start': '2025-03-12T19:00:00', 'end': '2025-03-12T21:30:00'}]}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}, {'id': '1680659023', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': [{'start': '2025-03-09T20:00:00', 'end': '2025-03-09T22:30:00'}]}, {'day': 'Monday', 'time_frames': [{'start': '2025-03-10T20:00:00', 'end': '2025-03-10T22:30:00'}]}, {'day': 'Tuesday', 'time_frames': [{'start': '2025-03-11T20:00:00', 'end': '2025-03-11T22:30:00'}]}, {'day': 'Wednesday', 'time_frames': []}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}, {'id': '1680707276', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': []}, {'day': 'Monday', 'time_frames': []}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': []}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': [{'start': '2025-03-14T14:00:00', 'end': '2025-03-14T16:00:00'}]}]}, {'id': '1737679897', 'priority': 'High', 'type': 'zoom', 'time': 60, 'days': [{'day': 'Sunday', 'time_frames': [{'start': '2025-03-09T17:00:00', 'end': '2025-03-09T22:00:00'}]}, {'day': 'Monday', 'time_frames': [{'start': '2025-03-10T17:00:00', 'end': '2025-03-10T22:00:00'}]}, {'day': 'Tuesday', 'time_frames': []}, {'day': 'Wednesday', 'time_frames': [{'start': '2025-03-12T17:00:00', 'end': '2025-03-12T22:00:00'}]}, {'day': 'Thursday', 'time_frames': []}, {'day': 'Friday', 'time_frames': []}]}]}
+2025-03-07 14:31:08,432 - get_input_flow - INFO - name: אבי זילברשטיין 	 start_date: 2025-03-09 	 days_list: ['"16:00-21:00"', '"18:00-20:00"', '"18:00-21:00"', '""', '""', '""', '{"index":1,"changed_at":"2025-03-06T12:14:34.861Z"}', '{"text":"ראשון: \\n16:00 - 21:00\\n\\nשני: \\n18:00 - 20:00\\n\\nשלישי: \\n18:00 - 21:00\\n\\nרביעי: \\n\\n\\nחמישי: \\n\\n\\nשישי: \\n","changed_at":"2025-03-06T14:01:37.197Z"}', None, '{}']
+2025-03-07 14:31:08,432 - get_input_flow - INFO - ['16:00-21:00', '18:00-20:00', '18:00-21:00', None, None, None]
+2025-03-07 14:31:08,432 - get_input_flow - INFO - fixed_days_list: ['16:00-21:00', '18:00-20:00', '18:00-21:00', None, None, None]
+2025-03-07 14:31:08,432 - get_input_flow - INFO - start date: 2025-03-09, times string: 16:00-21:00, day_index: 0
+2025-03-07 14:31:08,432 - get_input_flow - INFO - 16:00-21:00
+2025-03-07 14:31:08,432 - __main__ - ERROR - Error in collect_input_from_monday
+Traceback (most recent call last):
+  File "C:\Users\amirf\PyCharmMiscProject\Calendar_Automation\main.py", line 26, in _collect_input
+    output_file_name = collect_input_from_monday(input_file)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amirf\PyCharmMiscProject\Calendar_Automation\get_input_flow.py", line 334, in collect_input_from_monday
+    formatted_dict = convent_to_input_file_format(raw_dict)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amirf\PyCharmMiscProject\Calendar_Automation\get_input_flow.py", line 292, in convent_to_input_file_format
+    "time_frames": [parse_time_frame(start_date, fixed_days_list[index], index)]
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amirf\PyCharmMiscProject\Calendar_Automation\get_input_flow.py", line 209, in parse_time_frame
+    delta_start, delta_finish = parse_time(times_string)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amirf\PyCharmMiscProject\Calendar_Automation\get_input_flow.py", line 34, in parse_time
+    start_hour, start_minute, _ = map(int, start_str.split(':'))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+2025-03-07 14:31:08,433 - __main__ - ERROR - Error in main function
+2025-03-07 14:31:08,433 - __main__ - ERROR - not enough values to unpack (expected 3, got 2)

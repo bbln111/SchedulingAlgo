@@ -1,0 +1,149 @@
+{
+   "start_date":"2024-12-15",
+   "appointments":[
+      {
+         "id":6,
+         "priority":"High",
+         "type":"streets",
+         "time":60,
+         "days":[
+            {
+               "day":"Sunday",
+               "time_frames":[
+                  {
+                     "start":"2024-12-15T20:00:00",
+                     "end":"2024-12-15T21:15:00"
+                  }
+               ]
+            },
+            {
+               "day":"Monday",
+               "time_frames":[
+                  {
+                     "start":"2024-12-16T20:00:00",
+                     "end":"2024-12-16T21:15:00"
+                  }
+               ]
+            },
+            {
+               "day":"Tuesday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Wednesday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Thursday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Friday",
+               "time_frames":[
+
+               ]
+            }
+         ]
+      },
+      {
+         "id":7,
+         "priority":"High",
+         "type":"streets",
+         "time":60,
+         "days":[
+            {
+               "day":"Sunday",
+               "time_frames":[
+                  {
+                     "start":"2024-12-15T17:00:00",
+                     "end":"2024-12-15T21:00:00"
+                  }
+               ]
+            },
+            {
+               "day":"Monday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Tuesday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Wednesday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Thursday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Friday",
+               "time_frames":[
+
+               ]
+            }
+         ]
+      },
+      {
+         "id":8,
+         "priority":"High",
+         "type":"streets",
+         "time":60,
+         "days":[
+            {
+               "day":"Sunday",
+               "time_frames":[
+                  {
+                     "start":"2024-12-15T18:00:00",
+                     "end":"2024-12-15T21:00:00"
+                  }
+               ]
+            },
+            {
+               "day":"Monday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Tuesday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Wednesday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Thursday",
+               "time_frames":[
+
+               ]
+            },
+            {
+               "day":"Friday",
+               "time_frames":[
+
+               ]
+            }
+         ]
+      }
+   ]
+}

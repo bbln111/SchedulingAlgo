@@ -1,0 +1,397 @@
+{
+  "start_date": "2024-12-15",
+  "taken_time_in_week": [
+    {
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T11:15:00",
+              "end": "2024-12-15T15:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    }
+  ],
+  "appointments": [
+    {
+      "id": 1,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T07:00:00",
+              "end": "2024-12-15T14:00:00"
+            },
+            {
+              "start": "2024-12-15T18:00:00",
+              "end": "2024-12-15T22:30:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "priority": "High",
+      "type": "streets",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T10:00:00",
+              "end": "2024-12-15T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2024-12-16T12:00:00",
+              "end": "2024-12-16T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "priority": "High",
+      "type": "streets",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T09:00:00",
+              "end": "2024-12-15T19:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2024-12-16T09:00:00",
+              "end": "2024-12-16T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T09:30:00",
+              "end": "2024-12-15T21:45:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "priority": "High",
+      "type": "streets",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T09:00:00",
+              "end": "2024-12-15T21:15:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2024-12-16T09:00:00",
+              "end": "2024-12-16T21:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "priority": "High",
+      "type": "streets",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T09:00:00",
+              "end": "2024-12-15T21:15:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2024-12-16T09:00:00",
+              "end": "2024-12-16T22:15:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "priority": "High",
+      "type": "streets",
+      "time": 90,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T17:00:00",
+              "end": "2024-12-15T21:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "priority": "High",
+      "type": "streets",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T18:00:00",
+              "end": "2024-12-15T21:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2024-12-15T21:00:00",
+              "end": "2024-12-15T23:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    }
+  ]
+}

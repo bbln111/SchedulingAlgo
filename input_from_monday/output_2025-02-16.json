@@ -1,0 +1,116 @@
+{
+  "start_date": "2025-02-16",
+  "appointments": [
+    {
+      "id": 1563336507,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2025-02-16T09:00:00",
+              "end": "2025-02-16T12:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680614077,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2025-02-17T12:00:00",
+              "end": "2025-02-17T14:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680614161,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2025-02-17T12:00:00",
+              "end": "2025-02-17T14:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    }
+  ]
+}

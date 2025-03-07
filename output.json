@@ -1,0 +1,59 @@
+{
+    "filled_appointments": [
+        {
+            "id": 9,
+            "type": "zoom",
+            "start_time": "2024-12-15T21:45:00",
+            "end_time": "2024-12-15T23:00:00"
+        },
+        {
+            "id": 8,
+            "type": "streets",
+            "start_time": "2024-12-15T19:00:00",
+            "end_time": "2024-12-15T20:15:00"
+        },
+        {
+            "id": 7,
+            "type": "streets",
+            "start_time": "2024-12-15T17:15:00",
+            "end_time": "2024-12-15T19:00:00"
+        },
+        {
+            "id": 1,
+            "type": "zoom",
+            "start_time": "2024-12-15T11:45:00",
+            "end_time": "2024-12-15T13:00:00"
+        },
+        {
+            "id": 4,
+            "type": "zoom",
+            "start_time": "2024-12-15T10:30:00",
+            "end_time": "2024-12-15T11:45:00"
+        },
+        {
+            "id": 2,
+            "type": "streets",
+            "start_time": "2024-12-16T20:30:00",
+            "end_time": "2024-12-16T21:45:00"
+        },
+        {
+            "id": 3,
+            "type": "streets",
+            "start_time": "2024-12-16T14:45:00",
+            "end_time": "2024-12-16T16:00:00"
+        },
+        {
+            "id": 5,
+            "type": "streets",
+            "start_time": "2024-12-16T17:30:00",
+            "end_time": "2024-12-16T18:45:00"
+        },
+        {
+            "id": 6,
+            "type": "streets",
+            "start_time": "2024-12-16T19:15:00",
+            "end_time": "2024-12-16T20:30:00"
+        }
+    ],
+    "unfilled_appointments": []
+}

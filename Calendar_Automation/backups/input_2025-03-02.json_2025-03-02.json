@@ -1,0 +1,267 @@
+{
+  "start_date": "2025-03-02",
+  "appointments": [
+    {
+      "id": 1680614077,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": [
+            {
+              "start": "2025-03-05T19:00:00",
+              "end": "2025-03-05T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680658974,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": [
+            {
+              "start": "2025-03-04T17:00:00",
+              "end": "2025-03-04T20:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": [
+            {
+              "start": "2025-03-06T17:00:00",
+              "end": "2025-03-06T20:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680659023,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2025-03-02T20:00:00",
+              "end": "2025-03-02T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2025-03-03T20:00:00",
+              "end": "2025-03-03T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": [
+            {
+              "start": "2025-03-04T20:00:00",
+              "end": "2025-03-04T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1794099447,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2025-03-02T18:30:00",
+              "end": "2025-03-02T23:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": [
+            {
+              "start": "2025-03-06T18:30:00",
+              "end": "2025-03-06T23:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1837404310,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2025-03-02T16:30:00",
+              "end": "2025-03-02T19:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2025-03-03T16:30:00",
+              "end": "2025-03-03T19:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1842304580,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": [
+            {
+              "start": "2025-03-02T07:00:00",
+              "end": "2025-03-02T09:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Monday",
+          "time_frames": [
+            {
+              "start": "2025-03-03T08:00:00",
+              "end": "2025-03-03T09:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": [
+            {
+              "start": "2025-03-04T07:00:00",
+              "end": "2025-03-04T09:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": [
+            {
+              "start": "2025-03-05T07:00:00",
+              "end": "2025-03-05T09:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    }
+  ]
+}

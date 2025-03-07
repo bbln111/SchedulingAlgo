@@ -1,0 +1,549 @@
+{
+  "start_date": null,
+  "appointments": [
+    {
+      "id": 1680614077,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680659023,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680707276,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1737679897,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1737680030,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1780413706,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1794099447,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680659189,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680657337,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680613908,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680711953,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680712906,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680705508,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680658272,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1709437598,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680596183,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": 1680614161,
+      "priority": "High",
+      "type": "zoom",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": []
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    }
+  ]
+}
