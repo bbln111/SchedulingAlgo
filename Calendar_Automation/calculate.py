@@ -263,15 +263,18 @@ def can_place_block(appointment, day_index, block, calendar, used_field_hours, s
         # Count sessions that would exist after this appointment
         new_sessions = existing_sessions
         if appointment.type == "trial_streets":
-            new_sessions += 2
+            new_sessions += 2  # Trial counts as 2
         else:
             new_sessions += 1
 
         logger.debug(f"Sessions count: existing={existing_sessions}, after placement={new_sessions}")
 
-        # If this would be the only street session of the day, don't allow it
-        # Exception: if new_sessions >= 2, we're fine (multiple sessions will be scheduled)
-        if existing_sessions == 0 and new_sessions < 2:
+        # KEY FIX: If this is a trial_streets appointment, it counts as 2 sessions by itself
+        # So it should never be considered "isolated"
+        if appointment.type == "trial_streets":
+            logger.debug(f"Trial streets session allowed on its own (counts as 2)")
+            # Trial sessions are never isolated - they count as 2 by themselves
+        elif existing_sessions == 0 and new_sessions < 2:
             logger.debug(f"Block rejected: would create isolated street session")
             return False
 
@@ -825,7 +828,8 @@ def modified_backtrack_schedule(appointments, calendar, used_field_hours, settin
                                 index=0, unscheduled_tasks=None, final_schedule=None, day_appointments=None,
                                 recursion_depth=0, pre_assigned_ids=None):
     """Modified version of backtrack_schedule that skips pre-assigned appointments."""
-    logger.debug(f"Backtracking: index={index}, total={len(appointments)}, pre-assigned={len(pre_assigned_ids)}")
+    logger.debug(
+        f"Backtracking: index={index}, total={len(appointments)}, pre-assigned={len(pre_assigned_ids) if pre_assigned_ids else 0}")
 
     if unscheduled_tasks is None:
         unscheduled_tasks = []
@@ -841,13 +845,16 @@ def modified_backtrack_schedule(appointments, calendar, used_field_hours, settin
         for day, sessions in day_appointments.items():
             street_count = sum(1 for _, _, t in sessions if t in ["streets", "field"])
             trial_count = sum(1 for _, _, t in sessions if t == "trial_streets")
-            total_count = street_count + (2 * trial_count)
 
-            logger.debug(f"Validating day {day}: {street_count} street, {trial_count} trial = {total_count} total")
+            # Debug info
+            logger.debug(
+                f"Validating day {day}: {street_count} street, {trial_count} trial = {street_count + (2 * trial_count)} total")
 
-            if total_count == 1:
+            # KEY FIX: If there's a trial session, it counts as 2 and is never isolated
+            # Only check for isolation if there are no trial sessions
+            if trial_count == 0 and street_count == 1:
                 logger.debug(f"Schedule validation failed: Day {day} has isolated street session")
-            return False, unscheduled_tasks, final_schedule
+                return False, unscheduled_tasks, final_schedule
 
         logger.debug("Schedule validation successful")
         return True, unscheduled_tasks, final_schedule
@@ -1060,10 +1067,9 @@ def validate_schedule(final_schedule):
             client_days[client_id][day_index] = []
         client_days[client_id][day_index].append((start, end))
 
-    # Check for isolated street sessions
+    # Check for isolated street sessions - skip days with trial sessions
     for day, types in days_schedule.items():
-        street_count = len(types["streets"]) + 2 * len(types["trial_streets"])
-        if street_count == 1:
+        if len(types["trial_streets"]) == 0 and len(types["streets"]) == 1:
             validation_results["valid"] = False
             validation_results["issues"].append(f"Day {day} has only one street session")
 
