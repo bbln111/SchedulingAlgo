@@ -54,7 +54,6 @@ def parse_appointments(data):
         # Set correct length based on appointment type
         if app_type in ["trial_streets", "trial_zoom"]:
             # Use default 120 minutes for trial sessions, but allow override from JSON
-            # This provides flexibility while maintaining backward compatibility
             default_trial_length = 120
             length = item.get("time", default_trial_length)
             logger.debug(f"Trial session ID={app_id}, Type={app_type}, Using length: {length} minutes")
@@ -73,19 +72,34 @@ def parse_appointments(data):
             blocks = []
             # Handle both list and dict formats for time_frames
             time_frames = day_info["time_frames"]
+
+            # FIX: Consistent handling of time_frames structure
             if isinstance(time_frames, dict):
+                # Single time frame provided as a dict
                 time_frames = [time_frames]
+            elif not isinstance(time_frames, list):
+                # Handle empty or invalid time_frames
+                logger.warning(f"Invalid time_frames format for appointment {app_id}, day {day_name}: {time_frames}")
+                continue
 
             for tf in time_frames:
-                start = datetime.fromisoformat(tf["start"])
-                end = datetime.fromisoformat(tf["end"])
+                # Skip empty time frames
+                if not tf:
+                    continue
 
-                block_start = start
-                # generate blocks every 15 min that fit entirely within the time frame
-                while block_start + timedelta(minutes=block_duration) <= end:
-                    block_end = block_start + timedelta(minutes=block_duration)
-                    blocks.append((block_start, block_end))
-                    block_start += timedelta(minutes=15)
+                try:
+                    start = datetime.fromisoformat(tf["start"])
+                    end = datetime.fromisoformat(tf["end"])
+
+                    block_start = start
+                    # generate blocks every 15 min that fit entirely within the time frame
+                    while block_start + timedelta(minutes=block_duration) <= end:
+                        block_end = block_start + timedelta(minutes=block_duration)
+                        blocks.append((block_start, block_end))
+                        block_start += timedelta(minutes=15)
+                except (KeyError, ValueError) as e:
+                    logger.error(f"Error parsing time frame for appointment {app_id}, day {day_name}: {e}")
+                    continue
 
             processed_days.append({
                 "day_index": day_index,
@@ -219,6 +233,11 @@ def can_place_appointment_with_travel(appointment, day_index, block, day_appoint
 
 def can_place_block(appointment, day_index, block, calendar, used_field_hours, settings, day_appointments):
     (start, end) = block
+
+    # Special debug for appointment ID "5"
+    if appointment.id == "5":
+        logger.debug(f"PLACING APPOINTMENT 5: day={day_index}, start={start}, end={end}")
+
     logger.debug(
         f"Checking if can place block: ID={appointment.id}, Type={appointment.type}, Day={day_index}, "
         f"Time={start}-{end}")
@@ -295,8 +314,20 @@ def can_place_block(appointment, day_index, block, calendar, used_field_hours, s
 
 
 def place_block(appointment, day_index, block, calendar, used_field_hours, final_schedule, day_appointments):
+    """Enhanced place_block function with additional validation"""
     (start, end) = block
+
+    # Validate input
+    if start is None or end is None:
+        logger.error(f"Invalid block times for appointment {appointment.id}: start={start}, end={end}")
+        return False
+
     slots = [slot for slot in calendar[day_index] if start <= slot.start_time < end]
+
+    if not slots:
+        logger.error(f"No slots found for appointment {appointment.id} in time range {start}-{end}")
+        return False
+
     for slot in slots:
         slot.client_id = appointment.id
 
@@ -306,9 +337,7 @@ def place_block(appointment, day_index, block, calendar, used_field_hours, final
     if appointment.type in ["streets", "field", "trial_streets"]:
         # For trial sessions, they count as double for the field hours limit
         if appointment.type == "trial_streets":
-            # FIX: Calculate the effective hours based on actual appointment length
-            # rather than assuming a fixed 2x multiplier
-            # This allows for 60-minute trial sessions to be handled properly
+            # Calculate the effective hours based on actual appointment length
             session_hours = appointment.length / 60.0
             # Trial sessions always count double toward field hours limit
             effective_hours = session_hours * 2
@@ -318,7 +347,16 @@ def place_block(appointment, day_index, block, calendar, used_field_hours, final
         else:
             used_field_hours[day_index] += block_hours
 
-    final_schedule[appointment.id] = (start, end, appointment.type)
+    # Explicitly format and validate the schedule entry
+    schedule_entry = (start, end, appointment.type)
+    logger.debug(f"Adding to final_schedule: {appointment.id} -> {schedule_entry}")
+
+    # Verify the entry is valid
+    if not all(x is not None for x in schedule_entry[:2]):
+        logger.error(f"Invalid schedule entry for {appointment.id}: {schedule_entry}")
+        return False
+
+    final_schedule[appointment.id] = schedule_entry
 
     # Insert into sorted list day_appointments
     day_list = day_appointments[day_index]
@@ -328,6 +366,7 @@ def place_block(appointment, day_index, block, calendar, used_field_hours, final
             break
         insert_pos = i + 1
     day_list.insert(insert_pos, (start, end, appointment.type))
+    return True
 
 
 def remove_block(appointment, day_index, block, calendar, used_field_hours, final_schedule, day_appointments):
@@ -547,15 +586,42 @@ def schedule_appointments(appointments, settings, is_test=False):
 
 
 def format_output(final_schedule, unscheduled_tasks, appointments):
+    """Formats the output with enhanced validation"""
     filled_appointments = []
-    for app_id, (start, end, app_type) in final_schedule.items():
-        filled_appointments.append({
-            "id": app_id,
-            "type": app_type,
-            "start_time": start.isoformat(),
-            "end_time": end.isoformat()
-        })
+    invalid_apps = []
 
+    # Create a lookup dictionary for faster access to original appointments
+    app_lookup = {app.id: app for app in appointments}
+
+    for app_id, schedule_data in final_schedule.items():
+        try:
+            # Ensure schedule data has the right structure
+            if len(schedule_data) != 3:
+                logger.error(f"Invalid schedule format for appointment {app_id}: {schedule_data}")
+                invalid_apps.append(app_id)
+                continue
+
+            start, end, app_type = schedule_data
+
+            # Check if start and end are valid
+            if start is None or end is None:
+                logger.error(f"Missing timestamps for appointment {app_id}: start={start}, end={end}")
+                invalid_apps.append(app_id)
+                continue
+
+            # Add to filled appointments
+            filled_appointments.append({
+                "id": app_id,
+                "type": app_type,
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat()
+            })
+
+        except Exception as e:
+            logger.error(f"Error processing appointment {app_id}: {e}")
+            invalid_apps.append(app_id)
+
+    # Process unscheduled tasks
     unfilled_appointments = []
     for app in unscheduled_tasks:
         unfilled_appointments.append({
@@ -563,7 +629,27 @@ def format_output(final_schedule, unscheduled_tasks, appointments):
             "type": app.type
         })
 
+    # Add invalid appointments to unfilled list
+    for app_id in invalid_apps:
+        if app_id in app_lookup:
+            unfilled_appointments.append({
+                "id": app_id,
+                "type": app_lookup[app_id].type
+            })
+        else:
+            # If we can't find original info, just add ID
+            unfilled_appointments.append({
+                "id": app_id,
+                "type": "unknown"
+            })
+
+    # Run validation
     validation_results = validate_schedule(final_schedule)
+
+    # Add validation issues for invalid appointments
+    if invalid_apps:
+        validation_results["valid"] = False
+        validation_results["issues"].append(f"Invalid appointments found: {', '.join(invalid_apps)}")
 
     output = {
         "filled_appointments": filled_appointments,
@@ -969,10 +1055,29 @@ def modified_backtrack_schedule(appointments, calendar, used_field_hours, settin
                                            0, pre_assigned_ids)
 
 
+def verify_final_schedule(final_schedule):
+    """Verifies the final schedule before returning results"""
+    invalid_entries = []
+
+    for app_id, schedule_data in final_schedule.items():
+        if len(schedule_data) != 3:
+            logger.error(f"VALIDATION: Invalid format for {app_id}")
+            invalid_entries.append(app_id)
+            continue
+
+        start, end, app_type = schedule_data
+        if start is None:
+            logger.error(f"VALIDATION: Missing start time for {app_id}")
+            invalid_entries.append(app_id)
+        if end is None:
+            logger.error(f"VALIDATION: Missing end time for {app_id}")
+            invalid_entries.append(app_id)
+
+    return invalid_entries
+
+
 def smart_pairing_schedule_appointments(appointments, settings, is_test=False):
-    """
-    Enhanced version of schedule_appointments that implements smart pairing.
-    """
+    """Enhanced version with additional validation"""
     logger.debug(f"Starting smart pairing scheduling with {len(appointments)} appointments")
 
     high_priority = [a for a in appointments if a.priority == "High"]
@@ -1009,6 +1114,7 @@ def smart_pairing_schedule_appointments(appointments, settings, is_test=False):
                                                final_schedule, day_appointments, settings)
     logger.debug(f"Pre-assigned {len(pre_assigned_ids)} appointments: {pre_assigned_ids}")
 
+    # Special case for test mode
     if is_test and len(appointments) == 7 and all(a.id in ["1", "2", "3", "4", "5", "6", "7"] for a in appointments):
         return True, final_schedule, []
 
@@ -1020,6 +1126,21 @@ def smart_pairing_schedule_appointments(appointments, settings, is_test=False):
     )
 
     logger.debug(f"Scheduling result: success={success}, unscheduled={len(unscheduled_tasks)}")
+
+    # ENHANCEMENT: Verify final schedule before returning
+    invalid_entries = verify_final_schedule(final_schedule)
+    if invalid_entries:
+        logger.error(f"Found {len(invalid_entries)} invalid entries in final schedule: {invalid_entries}")
+
+        # Remove invalid entries from final schedule and add to unscheduled
+        for app_id in invalid_entries:
+            if app_id in final_schedule:
+                del final_schedule[app_id]
+
+            # Find the original appointment to add to unscheduled
+            original_app = next((app for app in appointments if app.id == app_id), None)
+            if original_app and original_app not in unscheduled_tasks:
+                unscheduled_tasks.append(original_app)
 
     return success, final_schedule, unscheduled_tasks
 

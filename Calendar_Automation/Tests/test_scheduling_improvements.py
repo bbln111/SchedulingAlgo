@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from calculate import (
     parse_appointments, ScheduleSettings, schedule_appointments,
-    enhanced_score_candidate, can_place_block, initialize_calendar
+    enhanced_score_candidate, can_place_block, initialize_calendar, place_block
 )
 
 
@@ -160,6 +160,46 @@ class TestSchedulingImprovements(unittest.TestCase):
             # If there are any street sessions, there should be at least 2
             if street_count > 0 or trial_count > 0:
                 self.assertGreaterEqual(street_count + (2 * trial_count), 2)
+
+    def test_place_block_validation(self):
+        """Test that place_block properly validates and stores start/end times."""
+        calendar = initialize_calendar(self.settings)
+        used_field_hours = [0] * 6
+        final_schedule = {}
+        day_appointments = {d: [] for d in range(6)}
+
+        # Get a valid appointment from the test data (the first one will work)
+        appointment = self.appointments[0]  # Using the first appointment instead of looking for ID 5
+        day_data = appointment.days[0]
+        day_index = day_data["day_index"]
+        block = day_data["blocks"][0]
+
+        # Place the block
+        result = place_block(appointment, day_index, block, calendar,
+                             used_field_hours, final_schedule, day_appointments)
+
+        # Verify it was placed successfully
+        self.assertTrue(result)
+
+        # Verify it's in the final schedule with both start and end times
+        self.assertIn(appointment.id, final_schedule)
+        schedule_entry = final_schedule[appointment.id]
+
+        # Ensure entry has the correct format (start, end, type)
+        self.assertEqual(len(schedule_entry), 3)
+
+        start, end, app_type = schedule_entry
+
+        # Verify start and end times are not None
+        self.assertIsNotNone(start)
+        self.assertIsNotNone(end)
+
+        # Verify times match the original block
+        self.assertEqual(start, block[0])
+        self.assertEqual(end, block[1])
+
+        # Verify the appointment type is correct
+        self.assertEqual(app_type, appointment.type)
 
 
 if __name__ == "__main__":
