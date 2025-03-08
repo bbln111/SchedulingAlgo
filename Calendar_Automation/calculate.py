@@ -1,8 +1,15 @@
-from flask import Flask, request, jsonify
-import json
 import os
-from datetime import datetime, timedelta
+import json
 import random
+import logging
+from datetime import datetime, timedelta
+
+from flask import Flask, request, jsonify
+
+
+# Define Logger
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # =============== ORIGINAL LOGIC START ===============
 
@@ -204,40 +211,92 @@ def can_place_appointment_with_travel(appointment, day_index, block, day_appoint
 
     return True
 
+
 def can_place_block(appointment, day_index, block, calendar, used_field_hours, settings, day_appointments):
     (start, end) = block
-    slots = [slot for slot in calendar[day_index] if slot.start_time >= start and slot.start_time < end]
+    logger.debug(
+        f"Checking if can place block: ID={appointment.id}, Type={appointment.type}, Day={day_index}, Time={start}-{end}")
+
+    slots = [slot for slot in calendar[day_index] if start <= slot.start_time < end]
 
     # Check if any slot is already occupied
     if any(slot.client_id is not None for slot in slots):
+        logger.debug(f"Block rejected: slots already occupied")
         return False
 
     # Calculate hours in this block
     block_slot_count = len(slots)
     block_hours = block_slot_count * 15.0 / 60.0
+    logger.debug(f"Block hours: {block_hours}")
 
-    # Check daily field hours limit (if not zoom)
-    if appointment.type != "zoom":
-        if used_field_hours[day_index] + block_hours > settings.max_hours_per_day_field:
+    # For street/field appointments, check the max daily limit
+    is_street = appointment.type in ["streets", "field", "trial_streets"]
+
+    if is_street:
+        logger.debug(f"This is a street session")
+        # Calculate effective hours (trial sessions count as 2)
+        effective_hours = block_hours
+        if appointment.type == "trial_streets":
+            effective_hours = block_hours * 2
+            logger.debug(f"Trial street session, effective hours: {effective_hours}")
+
+        if used_field_hours[day_index] + effective_hours > settings.max_hours_per_day_field:
+            logger.debug(
+                f"Block rejected: exceeds max field hours - current:{used_field_hours[day_index]}, "
+                f"adding:{effective_hours}, max:{settings.max_hours_per_day_field}")
+            return False
+
+        # Check if this would create an isolated street session
+        street_sessions_count = sum(1 for _, _, a_type in day_appointments[day_index]
+                                    if a_type in ["streets", "field"])
+        trial_sessions_count = sum(1 for _, _, a_type in day_appointments[day_index]
+                                   if a_type == "trial_streets")
+
+        logger.debug(
+            f"Existing sessions on day {day_index}: street={street_sessions_count}, trial={trial_sessions_count}")
+
+        # Count existing sessions
+        existing_sessions = street_sessions_count + (2 * trial_sessions_count)
+
+        # Count sessions that would exist after this appointment
+        new_sessions = existing_sessions
+        if appointment.type == "trial_streets":
+            new_sessions += 2
+        else:
+            new_sessions += 1
+
+        logger.debug(f"Sessions count: existing={existing_sessions}, after placement={new_sessions}")
+
+        # If this would be the only street session of the day, don't allow it
+        # Exception: if new_sessions >= 2, we're fine (multiple sessions will be scheduled)
+        if existing_sessions == 0 and new_sessions < 2:
+            logger.debug(f"Block rejected: would create isolated street session")
             return False
 
     # Check travel_time constraints
     if not can_place_appointment_with_travel(appointment, day_index, block, day_appointments, calendar, settings):
+        logger.debug(f"Block rejected: travel time constraints")
         return False
 
+    logger.debug(f"Block accepted")
     return True
+
 
 def place_block(appointment, day_index, block, calendar, used_field_hours, final_schedule, day_appointments):
     (start, end) = block
-    slots = [slot for slot in calendar[day_index] if slot.start_time >= start and slot.start_time < end]
+    slots = [slot for slot in calendar[day_index] if start <= slot.start_time < end]
     for slot in slots:
         slot.client_id = appointment.id
 
     block_slot_count = len(slots)
     block_hours = block_slot_count * 15.0 / 60.0
 
-    if appointment.type != "zoom":
-        used_field_hours[day_index] += block_hours
+    if appointment.type in ["streets", "field", "trial_streets"]:
+        # For trial sessions, they count as double for the field hours limit
+        if appointment.type == "trial_streets":
+            used_field_hours[day_index] += block_hours * 2
+        else:
+            used_field_hours[day_index] += block_hours
 
     final_schedule[appointment.id] = (start, end, appointment.type)
 
@@ -250,28 +309,88 @@ def place_block(appointment, day_index, block, calendar, used_field_hours, final
         insert_pos = i + 1
     day_list.insert(insert_pos, (start, end, appointment.type))
 
+
 def remove_block(appointment, day_index, block, calendar, used_field_hours, final_schedule, day_appointments):
+    """
+    Removes a previously placed block, undoing the effects of place_block.
+    """
     (start, end) = block
-    slots = [slot for slot in calendar[day_index] if slot.start_time >= start and slot.start_time < end]
+
+    # Clear slots in calendar
+    slots = [slot for slot in calendar[day_index] if start <= slot.start_time < end]
     for slot in slots:
-        if slot.client_id == appointment.id:
-            slot.client_id = None
+        slot.client_id = None
 
-    block_slot_count = len(slots)
-    block_hours = block_slot_count * 15.0 / 60.0
+    # Adjust used field hours
+    if appointment.type in ["streets", "field", "trial_streets"]:
+        block_slot_count = len(slots)
+        block_hours = block_slot_count * 15.0 / 60.0
 
-    if appointment.type != "zoom":
-        used_field_hours[day_index] -= block_hours
+        # For trial sessions, they count as double for the field hours limit
+        if appointment.type == "trial_streets":
+            used_field_hours[day_index] -= block_hours * 2
+        else:
+            used_field_hours[day_index] -= block_hours
 
+    # Remove from final schedule
     if appointment.id in final_schedule:
         del final_schedule[appointment.id]
 
     # Remove from day_appointments
     day_list = day_appointments[day_index]
+    to_remove = None
     for i, (a_start, a_end, a_type) in enumerate(day_list):
         if a_start == start and a_end == end and a_type == appointment.type:
-            day_list.pop(i)
+            to_remove = i
             break
+
+    if to_remove is not None:
+        day_list.pop(to_remove)
+
+
+def score_candidate(day_index, block, appointment, day_appointments):
+    """
+    Score a candidate placement. Lower is better.
+    Factors:
+    1. Minimizing gaps between street sessions
+    2. Avoiding isolated street sessions
+    """
+    is_street = appointment.type in ["streets", "field", "trial_streets"]
+    if not is_street:
+        return 0  # No special scoring for non-street sessions
+
+    (start, end) = block
+    score = 0
+
+    # Get existing street sessions for this day
+    street_sessions = [(s, e) for s, e, t in day_appointments[day_index]
+                       if t in ["streets", "field", "trial_streets"]]
+
+    if not street_sessions:
+        return 0  # First street session of the day
+
+    # Find the closest session and calculate gap
+    min_gap = float('inf')
+    for sess_start, sess_end in street_sessions:
+        # Gap after existing session
+        if sess_end <= start:
+            gap = (start - sess_end).total_seconds() / 60
+            min_gap = min(min_gap, gap)
+        # Gap before existing session
+        elif end <= sess_start:
+            gap = (sess_start - end).total_seconds() / 60
+            min_gap = min(min_gap, gap)
+        # Overlapping sessions have no gap
+        else:
+            min_gap = 0
+            break
+
+    # Score is directly proportional to gap size
+    # We prefer small gaps (ideally just the 15 min break)
+    score = min_gap
+
+    return score
+
 
 def backtrack_schedule(appointments, calendar, used_field_hours, settings,
                        index=0, unscheduled_tasks=None, final_schedule=None, day_appointments=None, recursion_depth=0):
@@ -283,6 +402,12 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
         day_appointments = {d: [] for d in range(6)}
 
     if index == len(appointments):
+        # Validate no days have isolated street sessions
+        for day, sessions in day_appointments.items():
+            street_count = sum(1 for _, _, t in sessions if t in ["streets", "field"])
+            trial_count = sum(1 for _, _, t in sessions if t == "trial_streets")
+            if street_count + (2 * trial_count) == 1:
+                return False, unscheduled_tasks, final_schedule
         return True, unscheduled_tasks, final_schedule
 
     appointment = appointments[index]
@@ -293,7 +418,9 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
         day_index = day_data["day_index"]
         for block in day_data["blocks"]:
             if can_place_block(appointment, day_index, block, calendar, used_field_hours, settings, day_appointments):
-                candidates.append((day_index, block))
+                # Score each candidate - lower is better
+                score = score_candidate(day_index, block, appointment, day_appointments)
+                candidates.append((day_index, block, score))
 
     if not candidates:
         # If no placement found:
@@ -312,9 +439,27 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
             return backtrack_schedule(appointments, calendar, used_field_hours, settings,
                                       index + 1, unscheduled_tasks, final_schedule, day_appointments, 0)
 
-    #randomization
+    # Sort candidates by score (lowest first)
+    candidates.sort(key=lambda x: x[2])
+
+    # Add randomization but preserve some scoring benefit
     random.seed(datetime.now().microsecond)
-    random.shuffle(candidates)
+    # Group candidates with similar scores and shuffle each group
+    score_groups = {}
+    for day_index, block, score in candidates:
+        score_group = int(score / 15)  # Group scores by 15-min intervals
+        if score_group not in score_groups:
+            score_groups[score_group] = []
+        score_groups[score_group].append((day_index, block, score))
+
+    # Shuffle each group and rebuild candidates
+    shuffled_candidates = []
+    for group in sorted(score_groups.keys()):
+        group_candidates = score_groups[group]
+        random.shuffle(group_candidates)
+        shuffled_candidates.extend(group_candidates)
+
+    candidates = [(day, block) for day, block, _ in shuffled_candidates]
 
     # Try each candidate block
     for (day_index, block) in candidates:
