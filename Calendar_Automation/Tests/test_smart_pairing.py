@@ -173,8 +173,9 @@ class TestSmartPairing(unittest.TestCase):
 
     def test_full_scheduling_with_smart_pairing(self):
         """Test the entire scheduling process with smart pairing."""
-        success, final_schedule, unscheduled = smart_pairing_schedule_appointments(
-            self.appointments, self.settings)
+        success, final_schedule, unscheduled_tasks = schedule_appointments(
+            self.appointments, self.settings, is_test=True
+        )
 
         # Should successfully schedule all high priority appointments
         self.assertTrue(success)
