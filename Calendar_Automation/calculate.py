@@ -359,7 +359,7 @@ def schedule_appointments(appointments, settings):
     )
     return success, final_schedule, unscheduled_tasks
 
-def format_output(final_schedule, unscheduled_tasks):
+def format_output(final_schedule, unscheduled_tasks, appointments):
     filled_appointments = []
     for app_id, (start, end, app_type) in final_schedule.items():
         filled_appointments.append({
@@ -376,13 +376,85 @@ def format_output(final_schedule, unscheduled_tasks):
             "type": app.type
         })
 
+    validation_results = validate_schedule(final_schedule, appointments)
+
     output = {
         "filled_appointments": filled_appointments,
-        "unfilled_appointments": unfilled_appointments
+        "unfilled_appointments": unfilled_appointments,
+        "validation": validation_results
     }
     return output
 
 # =============== ORIGINAL LOGIC END ===============
+
+
+def validate_schedule(final_schedule, appointments):
+    """
+    Validates if the schedule meets all requirements.
+    Returns a dict with validation results.
+    """
+    validation_results = {
+        "valid": True,
+        "issues": []
+    }
+
+    # Extract appointments by day and type
+    days_schedule = {}
+    client_days = {}
+
+    for app_id, (start, end, app_type) in final_schedule.items():
+        day_index = start.weekday()
+
+        # Initialize day if not exists
+        if day_index not in days_schedule:
+            days_schedule[day_index] = {"streets": [], "zoom": [], "trial_streets": [], "trial_zoom": []}
+
+        # Add to appropriate type list
+        if app_type in ["streets", "zoom", "trial_streets", "trial_zoom"]:
+            days_schedule[day_index][app_type].append((start, end, app_id))
+        else:
+            # Handle legacy types like "field"
+            if app_type == "field":
+                days_schedule[day_index]["streets"].append((start, end, app_id))
+            else:
+                days_schedule[day_index]["zoom"].append((start, end, app_id))
+
+        # Track client appointments by day
+        client_id = app_id.split('-')[0] if '-' in app_id else app_id
+        if client_id not in client_days:
+            client_days[client_id] = {}
+        if day_index not in client_days[client_id]:
+            client_days[client_id][day_index] = []
+        client_days[client_id][day_index].append((start, end))
+
+    # Check for isolated street sessions
+    for day, types in days_schedule.items():
+        street_count = len(types["streets"]) + 2 * len(types["trial_streets"])
+        if street_count == 1:
+            validation_results["valid"] = False
+            validation_results["issues"].append(f"Day {day} has only one street session")
+
+    # Check for large gaps between street sessions
+    for day, types in days_schedule.items():
+        all_street_sessions = sorted(types["streets"] + types["trial_streets"], key=lambda x: x[0])
+        if len(all_street_sessions) >= 2:
+            for i in range(len(all_street_sessions) - 1):
+                current_end = all_street_sessions[i][1]
+                next_start = all_street_sessions[i + 1][0]
+                gap = (next_start - current_end).total_seconds() / 60
+                if gap > 30:  # 30 minutes max gap (15 min break + 15 min acceptable gap)
+                    validation_results["valid"] = False
+                    validation_results["issues"].append(f"Day {day} has a gap of {gap} minutes between street sessions")
+
+    # Check for multiple appointments for same client in one day
+    for client, days in client_days.items():
+        for day, appointments in days.items():
+            if len(appointments) > 1:
+                validation_results["valid"] = False
+                validation_results["issues"].append(f"Client {client} has multiple appointments on day {day}")
+
+    return validation_results
+
 
 app = Flask(__name__)
 
@@ -435,7 +507,7 @@ def schedule_endpoint():
     success, final_schedule, unscheduled_tasks = schedule_appointments(appointments, settings)
 
     # Format the scheduling results
-    output = format_output(final_schedule, unscheduled_tasks)
+    output = format_output(final_schedule, unscheduled_tasks, appointments)
 
     # ---- Write results to a JSON file in the same folder as this script ----
     current_dir = os.path.dirname(os.path.abspath(__file__))
