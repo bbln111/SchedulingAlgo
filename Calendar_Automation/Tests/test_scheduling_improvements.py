@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from calculate import (
     parse_appointments, ScheduleSettings, schedule_appointments,
-    score_candidate, can_place_block, initialize_calendar
+    enhanced_score_candidate, can_place_block, initialize_calendar
 )
 
 
@@ -71,7 +71,7 @@ class TestSchedulingImprovements(unittest.TestCase):
 
         self.appointments = parse_appointments(self.test_data)
 
-    def test_score_candidate(self):
+    def test_enhanced_score_candidate(self):
         """Test the scoring function for candidate placements."""
         # Setup day_appointments with existing sessions
         day_appointments = {0: [], 1: [], 2: [], 3: [], 4: [], 5: []}
@@ -84,12 +84,12 @@ class TestSchedulingImprovements(unittest.TestCase):
         # Test scoring for a session immediately after (should score low/good)
         start2 = datetime(2025, 3, 2, 17, 15)  # 15 min gap
         end2 = datetime(2025, 3, 2, 18, 15)
-        score1 = score_candidate(0, (start2, end2), self.appointments[0], day_appointments)
+        score1 = enhanced_score_candidate(0, (start2, end2), self.appointments[0], day_appointments)
 
         # Test scoring for a session with a bigger gap (should score higher/worse)
         start3 = datetime(2025, 3, 2, 18, 0)  # 60 min gap
         end3 = datetime(2025, 3, 2, 19, 0)
-        score2 = score_candidate(0, (start3, end3), self.appointments[0], day_appointments)
+        score2 = enhanced_score_candidate(0, (start3, end3), self.appointments[0], day_appointments)
 
         # The session with smaller gap should have a better (lower) score
         self.assertLess(score1, score2)

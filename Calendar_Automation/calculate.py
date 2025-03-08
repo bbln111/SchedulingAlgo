@@ -896,7 +896,7 @@ def modified_backtrack_schedule(appointments, calendar, used_field_hours, settin
     # Sort and try candidates
     candidates.sort(key=lambda x: x[2])
 
-    for (day_index, block) in candidates:
+    for (day_index, block, _) in candidates:  # Adding _ to capture but ignore the score
         logger.debug(f"Trying to place ID={appointment.id} on day {day_index}")
         old_field_hours = used_field_hours[day_index]
         saved_day_appointments = [list(day_appointments[d]) for d in range(6)]
