@@ -11,6 +11,7 @@ class CalendarSlot:
         self.start_time = start_time
         self.client_id = client_id
 
+
 class Appointment:
     def __init__(self, id, priority, days, app_type, length):
         self.id = id
@@ -18,6 +19,7 @@ class Appointment:
         self.days = days  # list of {day_index, blocks}
         self.type = app_type  # "zoom" or "field" or other
         self.length = length  # in minutes, multiple of 15
+
 
 class ScheduleSettings:
     def __init__(self, start_hour, end_hour, min_gap, max_hours_per_day_field, travel_time, start_date):
@@ -81,6 +83,7 @@ def parse_appointments(data):
         appointments.append(Appointment(app_id, priority, processed_days, app_type, length))
     return appointments
 
+
 def initialize_calendar(settings):
     calendar = {day: [] for day in range(6)}
     for day in range(6):
@@ -93,9 +96,11 @@ def initialize_calendar(settings):
             current_time += timedelta(minutes=15)
     return calendar
 
+
 def day_start_time(settings, day_index):
     current_day = settings.start_date + timedelta(days=day_index)
     return datetime.combine(current_day, settings.start_hour)
+
 
 def check_free_gap(calendar, day_index, start_time, end_time):
     """
@@ -110,6 +115,7 @@ def check_free_gap(calendar, day_index, start_time, end_time):
             if slot.client_id is not None:
                 return False
     return True
+
 
 def can_place_appointment_with_travel(appointment, day_index, block, day_appointments, calendar, settings):
     """
@@ -350,6 +356,7 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
         return backtrack_schedule(appointments, calendar, used_field_hours, settings,
                                   index + 1, unscheduled_tasks, final_schedule, day_appointments, 0)
 
+
 def schedule_appointments(appointments, settings):
     high_priority = [a for a in appointments if a.priority == "High"]
     medium_priority = [a for a in appointments if a.priority == "Medium"]
@@ -368,12 +375,13 @@ def schedule_appointments(appointments, settings):
 
     # Initialize
     calendar = initialize_calendar(settings)
-    used_field_hours = [0]*6
+    used_field_hours = [0] * 6
 
     success, unscheduled_tasks, final_schedule = backtrack_schedule(
         sorted_appointments, calendar, used_field_hours, settings
     )
     return success, final_schedule, unscheduled_tasks
+
 
 def format_output(final_schedule, unscheduled_tasks, appointments):
     filled_appointments = []
@@ -400,6 +408,7 @@ def format_output(final_schedule, unscheduled_tasks, appointments):
         "validation": validation_results
     }
     return output
+
 
 # =============== ORIGINAL LOGIC END ===============
 
@@ -474,6 +483,7 @@ def validate_schedule(final_schedule, appointments):
 
 app = Flask(__name__)
 
+
 @app.route('/schedule', methods=['POST'])
 def schedule_endpoint():
     """
@@ -508,12 +518,12 @@ def schedule_endpoint():
 
     # Example: these settings can be customized or also come dynamically from data
     settings = ScheduleSettings(
-        start_hour="10:00",              # earliest start
-        end_hour="23:00",               # latest end
-        min_gap=15,                     # 15 min gap
-        max_hours_per_day_field=5,      # max 5 hours of field visits per day
-        travel_time=75,                 # 75 min travel time
-        start_date=data["start_date"]   # must be format YYYY-MM-DD
+        start_hour="10:00",  # earliest start
+        end_hour="23:00",  # latest end
+        min_gap=15,  # 15 min gap
+        max_hours_per_day_field=5,  # max 5 hours of field visits per day
+        travel_time=75,  # 75 min travel time
+        start_date=data["start_date"]  # must be format YYYY-MM-DD
     )
 
     # Parse the appointment data
@@ -533,6 +543,7 @@ def schedule_endpoint():
 
     # Return results in HTTP response as well
     return jsonify(output), 200
+
 
 if __name__ == "__main__":
     # Run the Flask app (debug=True is optional and not recommended in production)
