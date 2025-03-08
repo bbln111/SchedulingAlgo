@@ -9,15 +9,18 @@ logger = logging.getLogger(__name__)
 PYTHON_PATH = r"C:\Users\amirf\PyCharmMiscProject\.venv\Scripts\python.exe"
 FLASK_SERVER_LOCATION = r"C:\Users\amirf\PyCharmMiscProject\Calendar_Automation\calculate.py"
 
+
 def run_flask_server():
     logger.info(f"Running flask server on {FLASK_SERVER_LOCATION}")
     command = f'{PYTHON_PATH} {FLASK_SERVER_LOCATION}'
     running_server_process = _run_command(command, False)
     return running_server_process
 
+
 def _create_command(filename):
     command = f'curl.exe -X POST -H "Content-Type: application/json" -d "@{filename}" http://127.0.0.1:5000/schedule'
     return command
+
 
 def _run_command(command, wait=True):
     """
@@ -38,9 +41,11 @@ def _run_command(command, wait=True):
         logger.error(f"Error running command: {command}\nException: {str(e)}")
         return None, str(e)
 
+
 def _close_server(server_process):
     server_process.terminate()
     server_process.wait()
+
 
 def run_on_file(filename):
     logger.info(f"Running on file {filename}")
