@@ -28,6 +28,7 @@ class ScheduleSettings:
         self.travel_time = travel_time
         self.start_date = datetime.strptime(start_date, "%Y-%m-%d")
 
+
 def parse_appointments(data):
     weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     appointments = []
@@ -35,7 +36,17 @@ def parse_appointments(data):
         app_id = item["id"]
         priority = item["priority"]
         app_type = item["type"]
-        length = item["time"]  # appointment length in minutes
+
+        # Skip appointments with Exclude priority
+        if priority == "Exclude":
+            continue
+
+        # Set correct length based on appointment type
+        if app_type in ["trial_streets", "trial_zoom"]:
+            length = 120  # 2 hours for trial sessions
+        else:
+            length = item["time"]  # Regular session length
+
         block_duration = length + 15  # appointment length + 15 min gap
 
         processed_days = []
@@ -46,7 +57,12 @@ def parse_appointments(data):
             day_index = weekday_names.index(day_name)
 
             blocks = []
-            for tf in day_info["time_frames"]:
+            # Handle both list and dict formats for time_frames
+            time_frames = day_info["time_frames"]
+            if isinstance(time_frames, dict):
+                time_frames = [time_frames]
+
+            for tf in time_frames:
                 start = datetime.fromisoformat(tf["start"])
                 end = datetime.fromisoformat(tf["end"])
 
