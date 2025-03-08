@@ -12,6 +12,8 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from david_sdk import run_on_file
 from etc_functions import should_rerun, unite_output_from_script
+from visualization import generate_html_visualization
+
 
 # Configure logging
 logging.basicConfig(
