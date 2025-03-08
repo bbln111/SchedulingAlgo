@@ -33,10 +33,14 @@ def _run_command(command, wait=True):
     try:
         if wait:
             result = subprocess.run(command, shell=True, text=True, capture_output=True)
+            logger.info(f"Command result - stdout: '{result.stdout}', stderr: '{result.stderr}'")
+            if not result.stdout.strip():
+                logger.error("Empty response from server")
+                return None, "Empty response"
             return result.stdout, result.stderr
         else:
             process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return process  # Returns the process object for background execution
+            return process
     except Exception as e:
         logger.error(f"Error running command: {command}\nException: {str(e)}")
         return None, str(e)
@@ -52,17 +56,34 @@ def run_on_file(filename):
     logger.info("Starting server")
     server = run_flask_server()
     logger.info("Sleeping")
-    time.sleep(2) # let the server to wake up chill
+    time.sleep(2)  # let the server to wake up chill
     logger.info("Creating command")
     command = _create_command(filename)
     logger.info(f"Running command {command}")
     stdout, stderr = _run_command(command)
     logger.info(f"stdout: {stdout}, stderr: {stderr}")
-    data_as_json = json.loads(stdout)
+
+    # Handle potential empty response
+    if not stdout or not stdout.strip():
+        logger.error("No data returned from server")
+        _close_server(server)
+        return {"filled_appointments": [], "unfilled_appointments": [],
+                "validation": {"valid": False, "issues": ["Server returned empty response"]}}
+
+    # Handle JSON decode errors
+    try:
+        data_as_json = json.loads(stdout)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
+        logger.error(f"Raw response: '{stdout}'")
+        _close_server(server)
+        return {"filled_appointments": [], "unfilled_appointments": [],
+                "validation": {"valid": False, "issues": [f"JSON decode error: {e}"]}}
+
     logger.info(f"data_as_json: {data_as_json}")
     logger.info(f"Closing server")
     _close_server(server)
-    logger.info("Puta server dead")
+    logger.info("Server closed")
     return data_as_json
 
 
