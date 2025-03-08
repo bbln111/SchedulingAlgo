@@ -291,7 +291,7 @@
     {
       "id": "8",
       "priority": "High",
-      "type": "trial_streets", // type is not defined in the algorithm
+      "type": "trial_streets",
       "time": 60,
       "days": [
         {
@@ -328,7 +328,7 @@
     {
       "id": "9",
       "priority": "High",
-      "type": "trial_streets", // type is not defined in the algorithm
+      "type": "trial_streets",
       "time": 60,
       "days": [
         {
@@ -570,7 +570,7 @@
     {
       "id": "15",
       "priority": "High",
-      "type": "trial_zoom", // type is not defined in the algorithm
+      "type": "trial_zoom",
       "time": 60,
       "days": [
         {
