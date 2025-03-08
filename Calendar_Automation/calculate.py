@@ -53,7 +53,11 @@ def parse_appointments(data):
 
         # Set correct length based on appointment type
         if app_type in ["trial_streets", "trial_zoom"]:
-            length = 120  # 2 hours for trial sessions
+            # Use default 120 minutes for trial sessions, but allow override from JSON
+            # This provides flexibility while maintaining backward compatibility
+            default_trial_length = 120
+            length = item.get("time", default_trial_length)
+            logger.debug(f"Trial session ID={app_id}, Type={app_type}, Using length: {length} minutes")
         else:
             length = item["time"]  # Regular session length
 
@@ -237,10 +241,13 @@ def can_place_block(appointment, day_index, block, calendar, used_field_hours, s
     if is_street:
         logger.debug(f"This is a street session")
         # Calculate effective hours (trial sessions count as 2)
-        effective_hours = block_hours
         if appointment.type == "trial_streets":
-            effective_hours = block_hours * 2
-            logger.debug(f"Trial street session, effective hours: {effective_hours}")
+            # Match calculation in place_block
+            session_hours = appointment.length / 60.0
+            effective_hours = session_hours * 2
+            logger.debug(f"Trial street session, length={appointment.length}min, effective hours: {effective_hours}")
+        else:
+            effective_hours = block_hours
 
         if used_field_hours[day_index] + effective_hours > settings.max_hours_per_day_field:
             logger.debug(
@@ -299,7 +306,15 @@ def place_block(appointment, day_index, block, calendar, used_field_hours, final
     if appointment.type in ["streets", "field", "trial_streets"]:
         # For trial sessions, they count as double for the field hours limit
         if appointment.type == "trial_streets":
-            used_field_hours[day_index] += block_hours * 2
+            # FIX: Calculate the effective hours based on actual appointment length
+            # rather than assuming a fixed 2x multiplier
+            # This allows for 60-minute trial sessions to be handled properly
+            session_hours = appointment.length / 60.0
+            # Trial sessions always count double toward field hours limit
+            effective_hours = session_hours * 2
+            logger.debug(f"Trial street session ID={appointment.id}, Length={appointment.length}min, "
+                         f"Effective hours={effective_hours}")
+            used_field_hours[day_index] += effective_hours
         else:
             used_field_hours[day_index] += block_hours
 
@@ -333,7 +348,10 @@ def remove_block(appointment, day_index, block, calendar, used_field_hours, fina
 
         # For trial sessions, they count as double for the field hours limit
         if appointment.type == "trial_streets":
-            used_field_hours[day_index] -= block_hours * 2
+            # Match the same calculation as place_block
+            session_hours = appointment.length / 60.0
+            effective_hours = session_hours * 2
+            used_field_hours[day_index] -= effective_hours
         else:
             used_field_hours[day_index] -= block_hours
 

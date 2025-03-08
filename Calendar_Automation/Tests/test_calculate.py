@@ -35,7 +35,7 @@ class TestCalculations(unittest.TestCase):
                     "id": "2",
                     "priority": "High",
                     "type": "trial_streets",
-                    "time": 60,  # This should be overridden to 120
+                    # No time specified - should use default 120 minutes
                     "days": [
                         {
                             "day": "Monday",
@@ -48,6 +48,23 @@ class TestCalculations(unittest.TestCase):
                 },
                 {
                     "id": "3",
+                    "priority": "High",
+                    "type": "trial_streets",
+                    "time": 90,  # Explicitly specify 90 minutes
+                    "days": [
+                        {
+                            "day": "Tuesday",
+                            "time_frames": [
+                                {
+                                    "start": "2025-03-04T19:00:00",
+                                    "end": "2025-03-04T22:00:00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "4",
                     "priority": "Exclude",  # Should be skipped
                     "type": "zoom",
                     "time": 60,
@@ -68,22 +85,28 @@ class TestCalculations(unittest.TestCase):
 
         appointments = parse_appointments(test_data)
 
-        # Assert we have only 2 appointments (Exclude was skipped)
-        self.assertEqual(len(appointments), 2)
+        # Assert we have only 3 appointments (Exclude was skipped)
+        self.assertEqual(len(appointments), 3)
 
         # Test regular appointment
         self.assertEqual(appointments[0].id, "1")
         self.assertEqual(appointments[0].type, "streets")
         self.assertEqual(appointments[0].length, 60)
 
-        # Test trial appointment with dict format time_frames
+        # Test trial appointment with default duration
         self.assertEqual(appointments[1].id, "2")
         self.assertEqual(appointments[1].type, "trial_streets")
-        self.assertEqual(appointments[1].length, 120)  # Should be 120 not 60
+        self.assertEqual(appointments[1].length, 120)  # Default 120 minutes
 
-        # Verify blocks were created properly for both formats
+        # Test trial appointment with specified duration
+        self.assertEqual(appointments[2].id, "3")
+        self.assertEqual(appointments[2].type, "trial_streets")
+        self.assertEqual(appointments[2].length, 90)  # Custom 90 minutes
+
+        # Verify blocks were created properly for all formats
         self.assertTrue(len(appointments[0].days[0]["blocks"]) > 0)
         self.assertTrue(len(appointments[1].days[0]["blocks"]) > 0)
+        self.assertTrue(len(appointments[2].days[0]["blocks"]) > 0)
 
 
 if __name__ == "__main__":
