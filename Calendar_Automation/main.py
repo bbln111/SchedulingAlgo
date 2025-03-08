@@ -19,6 +19,7 @@ def configure_logging():
         filemode='w+'
     )
 
+
 def _collect_input():
     input_file = f"input_from_monday/input"
     try:
@@ -29,6 +30,7 @@ def _collect_input():
         logger.exception("Error in collect_input_from_monday")
         raise  # Re-raise to ensure the exception is not suppressed
     return output_file_name
+
 
 def main():
     # Configure logging
@@ -61,6 +63,7 @@ def main():
     # Call your final function
     write_to_monday(united_dictionary)
     logger.info("Done writing to Monday. Main function complete.")
+
 
 if __name__ == '__main__':
     configure_logging()
