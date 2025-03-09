@@ -22,8 +22,8 @@ class CalendarSlot:
 
 
 class Appointment:
-    def __init__(self, id, priority, days, app_type, length):
-        self.id = id
+    def __init__(self, appointment_id, priority, days, app_type, length):
+        self.id = appointment_id
         self.priority = priority
         self.days = days  # list of {day_index, blocks}
         self.type = app_type  # "zoom" or "field" or other
@@ -609,15 +609,15 @@ def schedule_appointments(appointments, settings, is_test=False):
     # If we're in test_zoom_appointment_scheduling test, schedule streets first
     if in_zoom_appointment_test:
         # Special handling for the zoom test - place street sessions first
-        for app in [a for a in sorted_appointments if a.type in ["streets", "field", "trial_streets"]]:
+        for appointment in [a for a in sorted_appointments if a.type in ["streets", "field", "trial_streets"]]:
             # Force street appointments to be scheduled in pairs for the test
-            # Find a day where there are at least 2 street appointments available
+            # Find a day when there are at least 2 street appointments available
             street_days = {}
-            for day_data in app.days:
+            for day_data in appointment.days:
                 day_index = day_data["day_index"]
                 if day_index not in street_days:
                     street_days[day_index] = []
-                street_days[day_index].append((app, day_data["blocks"]))
+                street_days[day_index].append((appointment, day_data["blocks"]))
 
             for day_index, apps_blocks in street_days.items():
                 # Only consider days with at least 2 street sessions
@@ -627,11 +627,6 @@ def schedule_appointments(appointments, settings, is_test=False):
 
                     # Place first appointment
                     if blocks1 and blocks1[0]:
-                        # Temporarily ignore isolated street session check
-                        temp_calendar = copy_calendar(calendar)
-                        temp_used_hours = used_field_hours.copy()
-                        temp_day_appointments = {d: list(day_appointments[d]) for d in range(6)}
-
                         # Place directly without checks
                         place_block(app1, day_index, blocks1[0], calendar, used_field_hours,
                                     final_schedule, day_appointments)
@@ -645,27 +640,28 @@ def schedule_appointments(appointments, settings, is_test=False):
                             break
 
     # Regular flow - first schedule zoom appointments
-    for app in [a for a in sorted_appointments if a.type in ["zoom", "trial_zoom"]]:
-        if app.id in pre_assigned_ids:
+    for appointment in [a for a in sorted_appointments if a.type in ["zoom", "trial_zoom"]]:
+        if appointment.id in pre_assigned_ids:
             continue
 
         candidates = []
 
-        for day_data in app.days:
+        for day_data in appointment.days:
             day_index = day_data["day_index"]
             for block in day_data["blocks"]:
-                if can_place_block(app, day_index, block, calendar, used_field_hours, settings, day_appointments):
+                if can_place_block(appointment, day_index, block, calendar, used_field_hours, settings,
+                                   day_appointments):
                     # Simple scoring for zoom
                     score = 0
                     candidates.append((day_index, block, score))
 
         if candidates:
             day_index, block, _ = candidates[0]
-            logger.debug(f"Placing zoom app ID={app.id} on day {day_index}")
-            place_block(app, day_index, block, calendar, used_field_hours, final_schedule, day_appointments)
-            pre_assigned_ids.append(app.id)
+            logger.debug(f"Placing zoom app ID={appointment.id} on day {day_index}")
+            place_block(appointment, day_index, block, calendar, used_field_hours, final_schedule, day_appointments)
+            pre_assigned_ids.append(appointment.id)
         else:
-            logger.debug(f"Could not place zoom app ID={app.id}")
+            logger.debug(f"Could not place zoom app ID={appointment.id}")
 
     # Skip pairing logic if we're in zoom test and have already pre-assigned
     if not in_zoom_appointment_test:
@@ -673,15 +669,15 @@ def schedule_appointments(appointments, settings, is_test=False):
         streets_by_day = {}
 
         # Group street appointments by day
-        for app in [a for a in sorted_appointments if a.type in ["streets", "field", "trial_streets"]]:
-            if app.id in pre_assigned_ids:
+        for appointment in [a for a in sorted_appointments if a.type in ["streets", "field", "trial_streets"]]:
+            if appointment.id in pre_assigned_ids:
                 continue
 
-            for day_data in app.days:
+            for day_data in appointment.days:
                 day_index = day_data["day_index"]
                 if day_index not in streets_by_day:
                     streets_by_day[day_index] = []
-                streets_by_day[day_index].append((app, day_data["blocks"]))
+                streets_by_day[day_index].append((appointment, day_data["blocks"]))
 
         # Try to schedule street appointments in pairs
         for day_index, day_streets in streets_by_day.items():
@@ -689,11 +685,11 @@ def schedule_appointments(appointments, settings, is_test=False):
                 # Identify all potential blocks for each appointment
                 valid_blocks = {}
 
-                for app, blocks in day_streets:
-                    if app.id in pre_assigned_ids:
+                for appointment, blocks in day_streets:
+                    if appointment.id in pre_assigned_ids:
                         continue
 
-                    valid_blocks[app.id] = []
+                    valid_blocks[appointment.id] = []
                     for block in blocks:
                         # Use a modified check that ignores the isolation rule
                         temp_calendar = copy_calendar(calendar)
@@ -710,19 +706,19 @@ def schedule_appointments(appointments, settings, is_test=False):
                         block_hours = block_slot_count * 15.0 / 60.0
 
                         effective_hours = block_hours
-                        if app.type == "trial_streets":
-                            session_hours = app.length / 60.0
+                        if appointment.type == "trial_streets":
+                            session_hours = appointment.length / 60.0
                             effective_hours = session_hours * 2
 
                         if temp_used_hours[day_index] + effective_hours > settings.max_hours_per_day_field:
                             continue
 
                         # Skip if travel time constraints not met
-                        if not can_place_appointment_with_travel(app, day_index, block, day_appointments,
+                        if not can_place_appointment_with_travel(appointment, day_index, block, day_appointments,
                                                                  temp_calendar, settings):
                             continue
 
-                        valid_blocks[app.id].append(block)
+                        valid_blocks[appointment.id].append(block)
 
                 # Now try to find pairs of street appointments that can be scheduled together
                 for i, (app1, _) in enumerate(day_streets):
@@ -788,7 +784,7 @@ def format_output(final_schedule, unscheduled_tasks, appointments):
     invalid_apps = []
 
     # Create a lookup dictionary for faster access to original appointments
-    app_lookup = {app.id: app for app in appointments}
+    app_lookup = {appointment.id: appointment for appointment in appointments}
 
     for app_id, schedule_data in final_schedule.items():
         try:
@@ -820,10 +816,10 @@ def format_output(final_schedule, unscheduled_tasks, appointments):
 
     # Process unscheduled tasks
     unfilled_appointments = []
-    for app in unscheduled_tasks:
+    for appointment in unscheduled_tasks:
         unfilled_appointments.append({
-            "id": app.id,
-            "type": app.type
+            "id": appointment.id,
+            "type": appointment.type
         })
 
     # Add invalid appointments to unfilled list
@@ -869,18 +865,18 @@ def identify_pairing_opportunities(appointments):
     """
     # Count potential street sessions per day
     day_street_potentials = {}
-    for app in appointments:
-        if app.type in ["streets", "field", "trial_streets"]:
-            for day_data in app.days:
+    for appointment in appointments:
+        if appointment.type in ["streets", "field", "trial_streets"]:
+            for day_data in appointment.days:
                 day_index = day_data["day_index"]
                 if day_index not in day_street_potentials:
                     day_street_potentials[day_index] = []
 
                 day_street_potentials[day_index].append({
-                    "app_id": app.id,
-                    "type": app.type,
+                    "app_id": appointment.id,
+                    "type": appointment.type,
                     "blocks": day_data["blocks"],
-                    "appointment": app
+                    "appointment": appointment
                 })
 
     # Find days with multiple potential street sessions
@@ -1089,7 +1085,8 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
 
             # Debug info
             logger.debug(
-                f"Validating day {day}: {street_count} street, {trial_count} trial = {street_count + (2 * trial_count)} total")
+                f"Validating day {day}: {street_count} street, {trial_count} trial = {street_count + (2 * trial_count)}"
+                f" total")
 
             # If there's a trial session, it counts as 2 and is never isolated
             if trial_count == 0 and street_count == 1:
@@ -1118,8 +1115,8 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
         type_counts[mapped_type] += 1
 
     # Count total appointments by type
-    for app in appointments:
-        app_type = app.type
+    for appointment in appointments:
+        app_type = appointment.type
         if app_type in type_totals:
             type_totals[app_type] += 1
 
@@ -1237,8 +1234,8 @@ def check_type_balance(final_schedule, appointments):
         type_counts[mapped_type] += 1
 
     # Count total appointments by type
-    for app in appointments:
-        app_type = app.type
+    for appointment in appointments:
+        app_type = appointment.type
         if app_type in type_totals:
             type_totals[app_type] += 1
 
@@ -1421,10 +1418,10 @@ def validate_schedule(final_schedule):
     return validation_results
 
 
-app = Flask(__name__)
+flask_app = Flask(__name__)
 
 
-@app.route('/schedule', methods=['POST'])
+@flask_app.route('/schedule', methods=['POST'])
 def schedule_endpoint():
     """
     Expects a JSON payload with at least these keys:
@@ -1487,6 +1484,7 @@ def schedule_endpoint():
 
 # Fallback implementation for can_place_appointment_with_travel for testing environments
 if 'can_place_appointment_with_travel' not in globals():
+    # noinspection PyUnusedLocal
     def can_place_appointment_with_travel(appointment, day_index, block, day_appointments, calendar, settings):
         """Mock implementation for testing purposes"""
         return True
@@ -1496,4 +1494,4 @@ if 'can_place_appointment_with_travel' not in globals():
 
 if __name__ == "__main__":
     # Run the Flask app (debug=True is optional and not recommended in production)
-    app.run(debug=True)
+    flask_app.run(debug=True)
