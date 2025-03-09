@@ -916,15 +916,25 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
     if pre_assigned_ids is None:
         pre_assigned_ids = []
 
+    logger.debug(
+        f"Backtracking: index={index}, total={len(appointments)}, pre-assigned={len(pre_assigned_ids) if pre_assigned_ids else 0}")
+
     if index >= len(appointments):
         # Validate no days have isolated street sessions
         for day, sessions in day_appointments.items():
             street_count = sum(1 for _, _, t in sessions if t in ["streets", "field"])
             trial_count = sum(1 for _, _, t in sessions if t == "trial_streets")
 
+            # Debug info
+            logger.debug(
+                f"Validating day {day}: {street_count} street, {trial_count} trial = {street_count + (2 * trial_count)} total")
+
+            # If there's a trial session, it counts as 2 and is never isolated
             if trial_count == 0 and street_count == 1:
                 logger.debug(f"Schedule validation failed: Day {day} has isolated street session")
                 return False, unscheduled_tasks, final_schedule
+
+        logger.debug("Schedule validation successful")
         return True, unscheduled_tasks, final_schedule
 
     appointment = appointments[index]
@@ -936,7 +946,7 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
                                   index + 1, unscheduled_tasks, final_schedule, day_appointments,
                                   recursion_depth, pre_assigned_ids)
 
-    # Calculate type fairness score for prioritizing underrepresented types
+    # Calculate type fairness to prioritize underrepresented types
     type_counts = {"streets": 0, "trial_streets": 0, "zoom": 0, "trial_zoom": 0, "field": 0}
 
     # Count scheduled appointments by type
@@ -944,11 +954,12 @@ def backtrack_schedule(appointments, calendar, used_field_hours, settings,
         mapped_type = app_type if app_type in type_counts else "zoom"  # Default for unknown types
         type_counts[mapped_type] += 1
 
-    # Calculate fairness boost
+    # Calculate type fairness score - prioritize underrepresented types
     current_type = appointment.type
     total_of_type = sum(1 for app in appointments if app.type == current_type)
     scheduled_of_type = type_counts.get(current_type, 0)
 
+    # Fairness boost for underrepresented types
     fairness_boost = 0
     if total_of_type > 0:
         scheduling_rate = scheduled_of_type / total_of_type
@@ -1098,7 +1109,7 @@ def smart_pairing_schedule_appointments(appointments, settings, is_test=False):
     if is_test and len(appointments) == 7 and all(a.id in ["1", "2", "3", "4", "5", "6", "7"] for a in appointments):
         return True, final_schedule, []
 
-    # Step 4: Run modified backtracking algorithm for remaining appointments
+    # Step 4: Run the fixed backtracking algorithm for remaining appointments
     success, unscheduled_tasks, _ = backtrack_schedule(
         sorted_appointments, calendar, used_field_hours, settings,
         unscheduled_tasks=[], final_schedule=final_schedule,
