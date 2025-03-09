@@ -728,7 +728,8 @@ class ScheduleOptimizer:
 
 def parse_appointments(data: Dict) -> List[Appointment]:
     """Parse appointment data from input format."""
-    weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    # Modify this array to only include days you want to support
+    weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]  # Remove "Friday"
     appointments = []
 
     logger.info(f"Parsing appointments from input data with {len(data.get('appointments', []))} appointments")
@@ -767,9 +768,9 @@ def parse_appointments(data: Dict) -> List[Appointment]:
 
             day_index = weekday_names.index(day_name)
 
-            # Skip days that fall outside the valid range (0-5)
-            if day_index >= 6:
-                logger.warning(f"Skipping day with index {day_index} (weekends not supported) for appointment {app_id}")
+            # Skip days that fall outside the valid range (0-4 now, since we removed Friday)
+            if day_index >= 5:
+                logger.warning(f"Skipping day with index {day_index} (not supported) for appointment {app_id}")
                 continue
 
             blocks = []

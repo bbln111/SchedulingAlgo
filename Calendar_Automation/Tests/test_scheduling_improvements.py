@@ -8,11 +8,11 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from calculate import (
     parse_appointments, ScheduleSettings, schedule_appointments,
-    enhanced_score_candidate, can_place_block, initialize_calendar, place_block
+    score_candidate, can_place_block, initialize_calendar, place_block
 )
 
 
-class TestSchedulingImprovements(unittest.TestCase):
+class SchedulingImprovements(unittest.TestCase):
     def setUp(self):
         # Setup basic test data
         self.test_data = {
@@ -84,12 +84,12 @@ class TestSchedulingImprovements(unittest.TestCase):
         # Test scoring for a session immediately after (should score low/good)
         start2 = datetime(2025, 3, 2, 17, 15)  # 15 min gap
         end2 = datetime(2025, 3, 2, 18, 15)
-        score1 = enhanced_score_candidate(0, (start2, end2), self.appointments[0], day_appointments)
+        score1 = score_candidate(0, (start2, end2), self.appointments[0], day_appointments)
 
         # Test scoring for a session with a bigger gap (should score higher/worse)
         start3 = datetime(2025, 3, 2, 18, 0)  # 60 min gap
         end3 = datetime(2025, 3, 2, 19, 0)
-        score2 = enhanced_score_candidate(0, (start3, end3), self.appointments[0], day_appointments)
+        score2 = score_candidate(0, (start3, end3), self.appointments[0], day_appointments)
 
         # The session with smaller gap should have a better (lower) score
         self.assertLess(score1, score2)
@@ -258,7 +258,7 @@ class TestSchedulingImprovements(unittest.TestCase):
         final_schedule = {}
 
         # First place the street appointments
-        street_apps = [a for a in appointments if a.type in ["streets", "field", "trial_streets"]]
+        street_apps = [a for a in appointments if a.is_street_session]
         if len(street_apps) >= 2:
             # Place first street appointment
             app1 = street_apps[0]

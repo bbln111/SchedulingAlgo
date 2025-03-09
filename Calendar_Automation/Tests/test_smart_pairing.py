@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from calculate import (
     parse_appointments, ScheduleSettings, schedule_appointments, find_optimal_pairings,
-    pre_assign_appointments, smart_pairing_schedule_appointments, enhanced_score_candidate,
-    can_place_block, initialize_calendar, identify_pairing_opportunities
+    # Replace pre_assign_appointments with pre_assign_street_pairs
+    pre_assign_street_pairs, score_candidate,
+    can_place_block, initialize_calendar
 )
 
 
@@ -98,9 +99,26 @@ class TestSmartPairing(unittest.TestCase):
 
         self.appointments = parse_appointments(self.test_data)
 
+    def identify_pairing_opportunities(self, appointments):
+        """Helper function to identify days with multiple street sessions.
+
+        This function replaces the original identify_pairing_opportunities function.
+        """
+        opportunities = {}
+        for app in appointments:
+            if app.is_street_session:
+                for day_data in app.days:
+                    day_index = day_data["day_index"]
+                    if day_index not in opportunities:
+                        opportunities[day_index] = []
+                    opportunities[day_index].append(app)
+
+        # Filter out days with only one street session
+        return {day: apps for day, apps in opportunities.items() if len(apps) >= 2}
+
     def test_identify_pairing_opportunities(self):
         """Test that the function correctly identifies days with multiple potential street sessions."""
-        opportunities = identify_pairing_opportunities(self.appointments)
+        opportunities = self.identify_pairing_opportunities(self.appointments)
 
         # Should identify Sunday (day 0) and Monday (day 1) as having multiple street sessions
         self.assertIn(0, opportunities)
@@ -118,8 +136,17 @@ class TestSmartPairing(unittest.TestCase):
         calendar = initialize_calendar(self.settings)
         used_field_hours = [0] * 6
 
-        opportunities = identify_pairing_opportunities(self.appointments)
-        optimal_pairings = find_optimal_pairings(opportunities, calendar, used_field_hours, self.settings)
+        # Get the pairing opportunities
+        opportunities = self.identify_pairing_opportunities(self.appointments)
+
+        # Create day_appointments for the pairings function
+        day_appointments = {d: [] for d in range(6)}
+
+        # Create street_appointments list
+        street_appointments = [a for a in self.appointments if a.is_street_session]
+
+        # Use the refactored find_optimal_pairings function
+        optimal_pairings = find_optimal_pairings(street_appointments, calendar, used_field_hours, self.settings)
 
         # Should find pairings for days 0 and 1
         self.assertIn(0, optimal_pairings)
@@ -145,10 +172,15 @@ class TestSmartPairing(unittest.TestCase):
         final_schedule = {}
         day_appointments = {d: [] for d in range(6)}
 
-        opportunities = identify_pairing_opportunities(self.appointments)
-        optimal_pairings = find_optimal_pairings(opportunities, calendar, used_field_hours, self.settings)
-        pre_assigned = pre_assign_appointments(optimal_pairings, calendar, used_field_hours, final_schedule,
-                                               day_appointments, self.settings)
+        # Get street appointments
+        street_appointments = [a for a in self.appointments if a.is_street_session]
+
+        # Find optimal pairings
+        optimal_pairings = find_optimal_pairings(street_appointments, calendar, used_field_hours, self.settings)
+
+        # Use the refactored pre_assign_street_pairs function
+        pre_assigned = pre_assign_street_pairs(optimal_pairings, calendar, used_field_hours,
+                                               final_schedule, day_appointments, self.settings)
 
         # Should pre-assign 4 appointments (2 pairs)
         self.assertEqual(len(pre_assigned), 4)
