@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from calculate import (
     parse_appointments, ScheduleSettings, schedule_appointments, find_optimal_pairings,
-    pre_assign_street_pairs, smart_pairing_schedule_appointments, enhanced_score_candidate,
+    pre_assign_appointments, smart_pairing_schedule_appointments, enhanced_score_candidate,
     can_place_block, initialize_calendar, identify_pairing_opportunities
 )
 
@@ -138,7 +138,7 @@ class TestSmartPairing(unittest.TestCase):
         self.assertIn(day1_pair["app1"].id, ["3", "4"])
         self.assertIn(day1_pair["app2"].id, ["3", "4"])
 
-    def test_pre_assign_street_pairs(self):
+    def test_pre_assign_appointments(self):
         """Test that street session pairs are correctly pre-assigned in the calendar."""
         calendar = initialize_calendar(self.settings)
         used_field_hours = [0] * 6
@@ -147,7 +147,7 @@ class TestSmartPairing(unittest.TestCase):
 
         opportunities = identify_pairing_opportunities(self.appointments)
         optimal_pairings = find_optimal_pairings(opportunities, calendar, used_field_hours, self.settings)
-        pre_assigned = pre_assign_street_pairs(optimal_pairings, calendar, used_field_hours, final_schedule,
+        pre_assigned = pre_assign_appointments(optimal_pairings, calendar, used_field_hours, final_schedule,
                                                day_appointments, self.settings)
 
         # Should pre-assign 4 appointments (2 pairs)
