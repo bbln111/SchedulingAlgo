@@ -41,20 +41,16 @@ def run_flask_server(flask_script_path, input_data, host='127.0.0.1', port=5000)
     Returns:
         dict: The scheduling result
     """
-    import signal
-    import functools
+    import logging
+    logger = logging.getLogger(__name__)
 
-    # Define a timeout handler
-    class TimeoutError(Exception):
-        pass
+    # Log input data details for debugging
+    appointment_count = len(input_data.get("appointments", []))
+    logger.info(f"Direct scheduling mode: Processing {appointment_count} appointments")
 
-    def timeout_handler(signum, frame):
-        raise TimeoutError("Scheduling operation timed out")
-
-    logger.info(f"Using direct scheduling approach for {flask_script_path}")
     try:
         # Import the module directly
-        module = import_module_from_path(flask_script_path, "schedule_module")
+        module = import_module_from_path(str(flask_script_path), "schedule_module")
 
         # Create settings
         if "start_date" in input_data:
@@ -75,247 +71,23 @@ def run_flask_server(flask_script_path, input_data, host='127.0.0.1', port=5000)
             # Parse the appointment data
             if hasattr(module, "parse_appointments"):
                 appointments = module.parse_appointments(input_data)
+                logger.info(f"Parsed {len(appointments)} appointments")
 
-                # Special handling for the test case
-                app_ids = [app.id for app in appointments]
+                # Log appointment types for debugging
+                street_count = sum(1 for a in appointments if a.type in ["streets", "field", "trial_streets"])
+                zoom_count = sum(1 for a in appointments if a.type in ["zoom", "trial_zoom"])
+                logger.info(f"Appointment breakdown: {street_count} street/field, {zoom_count} zoom")
 
-                # Special handling for cases with IDs 1-15
-                app_ids = sorted([app.id for app in appointments])
-                has_specific_pattern = all(str(i) in app_ids for i in range(1, 8))
+                # Call schedule_appointments directly - no special handling for test cases
+                if hasattr(module, "schedule_appointments"):
+                    success, final_schedule, unscheduled_tasks = module.schedule_appointments(appointments, settings)
+                    logger.info(
+                        f"Direct scheduling result: {len(final_schedule)} scheduled, {len(unscheduled_tasks)} unscheduled")
+                else:
+                    logger.error("Module does not have schedule_appointments function")
+                    raise ValueError("Required schedule_appointments function not found in the module")
 
-                # If we detect IDs 1-15, use a custom scheduling approach
-                if has_specific_pattern and any(int(app_id) > 7 for app_id in app_ids if app_id.isdigit()):
-                    logger.info("Detected specific test pattern with IDs 1-15, using custom scheduling")
-
-                    try:
-                        # Try implementing a custom scheduling pattern based on past success
-                        # Group appointments by type
-                        zoom_apps = [app for app in appointments if app.type in ["zoom", "trial_zoom"]]
-                        street_apps = [app for app in appointments if app.type in ["streets", "trial_streets", "field"]]
-
-                        # First schedule zoom appointments - they're easier
-                        success_zoom, zoom_schedule, unscheduled_zoom = module.schedule_appointments(
-                            zoom_apps, settings, is_test=False)
-
-                        # We'll approach the street appointments problem differently
-                        # First, let's understand what days have potential street sessions
-                        street_by_day = {}
-                        for app in street_apps:
-                            for day_data in app.days:
-                                day_idx = day_data["day_index"]
-                                if day_idx not in street_by_day:
-                                    street_by_day[day_idx] = []
-                                street_by_day[day_idx].append((app, day_data["blocks"]))
-
-                        # Special handling specifically targeting optimal grouping for IDs 1-9
-                        # Based on the patterns observed in the manual scheduling
-                        if all(str(i) in [app.id for app in street_apps] for i in range(1, 8)):
-                            logger.info("Detected specific pattern for IDs 1-9, using targeted scheduling")
-
-                            # Create new scheduling structures
-                            street_calendar = module.initialize_calendar(settings)
-                            street_used_hours = [0] * 6
-                            street_day_appointments = {d: [] for d in range(6)}
-                            street_schedule = {}
-
-                            # Try to place appointments according to known good pattern:
-                            # Group 1, 2, 3 on day 0 (Sunday)
-                            # Place 4 and 9 on day 2 (Tuesday)
-                            # Place 6 and 8 on day 3 (Wednesday)
-                            # Place 5 and 7 on day 4 (Thursday)
-
-                            # Hard-code optimal groupings based on your manual solution
-                            optimal_groups = {
-                                0: ["1", "2", "3"],  # Sunday
-                                2: ["4", "9"],  # Tuesday
-                                3: ["6", "8"],  # Wednesday
-                                4: ["5", "7"],  # Thursday
-                            }
-
-                            # First pass - try to place each appointment in its optimal day
-                            placed_ids = []
-                            for day_idx, app_ids in optimal_groups.items():
-                                # Get appointments for this day
-                                day_apps = []
-                                for app in street_apps:
-                                    if app.id in app_ids:
-                                        day_data = next((d for d in app.days if d["day_index"] == day_idx), None)
-                                        if day_data:
-                                            day_apps.append((app, day_data["blocks"]))
-
-                                # Try to place all apps for this day
-                                if len(day_apps) >= 2:
-                                    # First try to place the first appointment
-                                    first_placed = False
-                                    second_placed = False
-
-                                    # Sort by ID to match the pattern
-                                    day_apps.sort(key=lambda x: x[0].id)
-
-                                    # Try to place first appointment
-                                    app1, blocks1 = day_apps[0]
-                                    for block in blocks1:
-                                        if module.can_place_block_for_pairing(
-                                                app1, day_idx, block, street_calendar,
-                                                street_used_hours, settings, street_day_appointments
-                                        ):
-                                            module.place_block(
-                                                app1, day_idx, block, street_calendar,
-                                                street_used_hours, street_schedule, street_day_appointments
-                                            )
-                                            placed_ids.append(app1.id)
-                                            first_placed = True
-                                            break
-
-                                    # If first placed, try second with minimum gap
-                                    if first_placed and len(day_apps) > 1:
-                                        app2, blocks2 = day_apps[1]
-
-                                        # Find the block with minimum gap from the first appointment
-                                        blocks2.sort(key=lambda block: abs(
-                                            (block[0] - street_schedule[app1.id][1]).total_seconds()
-                                        ))
-
-                                        for block in blocks2:
-                                            if module.can_place_block_for_pairing(
-                                                    app2, day_idx, block, street_calendar,
-                                                    street_used_hours, settings, street_day_appointments
-                                            ):
-                                                module.place_block(
-                                                    app2, day_idx, block, street_calendar,
-                                                    street_used_hours, street_schedule, street_day_appointments
-                                                )
-                                                placed_ids.append(app2.id)
-                                                second_placed = True
-                                                break
-
-                                    # If we couldn't place second, remove first to avoid isolated session
-                                    if first_placed and not second_placed:
-                                        app1_block = (street_schedule[app1.id][0], street_schedule[app1.id][1])
-                                        module.remove_block(
-                                            app1, day_idx, app1_block, street_calendar,
-                                            street_used_hours, street_schedule, street_day_appointments
-                                        )
-                                        placed_ids.remove(app1.id)
-
-                            # Second pass - for any remaining appointments, find best placement
-                            remaining_street_apps = [app for app in street_apps if app.id not in placed_ids]
-
-                            if remaining_street_apps:
-                                # Sort by ID to prioritize earlier IDs
-                                remaining_street_apps.sort(key=lambda x: x.id)
-
-                                # Find days with at least one street session already
-                                days_with_sessions = {
-                                    day: len([1 for _, (_, _, app_type) in street_schedule.items()
-                                              if app_type in ["streets", "field", "trial_streets"]])
-                                    for day in range(6)
-                                }
-
-                                # Try to place each remaining appointment
-                                for app in remaining_street_apps:
-                                    # Calculate score for each possible placement
-                                    placement_options = []
-
-                                    for day_data in app.days:
-                                        day_idx = day_data["day_index"]
-
-                                        # Skip days with no blocks
-                                        if not day_data["blocks"]:
-                                            continue
-
-                                        # Score based on existing sessions
-                                        base_score = 1000
-                                        if day_idx in days_with_sessions and days_with_sessions[day_idx] > 0:
-                                            # Strongly prefer days that already have sessions
-                                            base_score -= 500
-
-                                        for block in day_data["blocks"]:
-                                            if module.can_place_block_for_pairing(
-                                                    app, day_idx, block, street_calendar,
-                                                    street_used_hours, settings, street_day_appointments
-                                            ):
-                                                # Calculate gap score if other sessions exist
-                                                gap_score = 0
-                                                day_sessions = [
-                                                    (start, end) for _, (start, end, _)
-                                                    in street_schedule.items()
-                                                    if start.date() == block[0].date()
-                                                ]
-
-                                                if day_sessions:
-                                                    # Find minimum gap to any session
-                                                    min_gap = float('inf')
-                                                    for sess_start, sess_end in day_sessions:
-                                                        # Gap after existing session
-                                                        if sess_end <= block[0]:
-                                                            gap = (block[0] - sess_end).total_seconds() / 60
-                                                            min_gap = min(min_gap, gap)
-                                                        # Gap before existing session
-                                                        elif block[1] <= sess_start:
-                                                            gap = (sess_start - block[1]).total_seconds() / 60
-                                                            min_gap = min(min_gap, gap)
-
-                                                    # Prefer gaps under 30 minutes
-                                                    if min_gap <= 30:
-                                                        gap_score = -400  # Strong preference
-                                                    elif min_gap <= 60:
-                                                        gap_score = -200
-                                                    else:
-                                                        gap_score = -100
-
-                                                placement_options.append((
-                                                    day_idx, block, base_score + gap_score
-                                                ))
-
-                                    # If we have options, place at the best one
-                                    if placement_options:
-                                        # Sort by score (lowest first - better)
-                                        placement_options.sort(key=lambda x: x[2])
-                                        best_day, best_block, _ = placement_options[0]
-
-                                        # Place the appointment
-                                        module.place_block(
-                                            app, best_day, best_block, street_calendar,
-                                            street_used_hours, street_schedule, street_day_appointments
-                                        )
-                                        placed_ids.append(app.id)
-
-                                        # Update days with sessions
-                                        if best_day in days_with_sessions:
-                                            days_with_sessions[best_day] += 1
-                                        else:
-                                            days_with_sessions[best_day] = 1
-
-                            # Determine unscheduled street appointments
-                            unscheduled_street = [app for app in street_apps if app.id not in placed_ids]
-
-                        else:
-                            # Fallback to regular scheduling
-                            street_schedule = {}
-                            unscheduled_street = street_apps
-
-                            # Try the general approach for non-specific patterns
-                            success_street, street_schedule, unscheduled_street = module.smart_pairing_schedule_appointments(
-                                street_apps, settings, is_test=True)
-
-                        # Manually merge the results from zoom and street scheduling
-                        final_schedule = {}
-                        final_schedule.update(zoom_schedule)
-                        final_schedule.update(street_schedule)
-
-                        unscheduled_tasks = unscheduled_zoom + unscheduled_street
-                        success = success_zoom and len(unscheduled_street) < len(street_apps)
-
-                        logger.info(f"Custom scheduling complete: {len(final_schedule)} appointments scheduled")
-
-                    except Exception as e:
-                        logger.error(f"Custom scheduling failed: {e}")
-                        # Fall back to regular scheduling
-                        success, final_schedule, unscheduled_tasks = module.schedule_appointments(appointments,
-                                                                                                  settings)
-
-                # Format the output if the function exists
+                # Format the output
                 if hasattr(module, "format_output"):
                     logger.info("Formatting output")
                     output = module.format_output(final_schedule, unscheduled_tasks, appointments)
@@ -350,7 +122,7 @@ def run_flask_server(flask_script_path, input_data, host='127.0.0.1', port=5000)
         raise ValueError("Required functions or classes not found in the module")
 
     except Exception as e:
-        logger.error(f"Error in direct scheduling: {e}")
+        logger.error(f"Error in direct scheduling: {e}", exc_info=True)
         raise
 
 
@@ -412,7 +184,7 @@ def in_memory_flask_server(flask_script_path, host='127.0.0.1', port=5000):
 
             # Load the module directly
             module_name = Path(flask_script_path).stem
-            module = SourceFileLoader(module_name, flask_script_path).load_module()
+            module = SourceFileLoader(module_name, str(flask_script_path)).load_module()
 
             # Find the Flask app
             app = None
@@ -519,6 +291,8 @@ def run_on_file(input_file, flask_script=None, endpoint="/schedule"):
         with open(input_path, 'r', encoding='utf-8') as f:
             try:
                 input_data = json.load(f)
+                appointment_count = len(input_data.get("appointments", []))
+                logger.info(f"Direct scheduling mode: Processing {appointment_count} appointments")
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in input file: {e}")
                 return {
