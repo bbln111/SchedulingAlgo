@@ -233,7 +233,7 @@ class ScheduleOptimizer:
             if app.is_street_session:
                 # Street sessions with fewer blocks get higher priority
                 num_blocks = sum(len(day_data["blocks"]) for day_data in app.days)
-                return (0, num_blocks)
+                return 0, num_blocks
             else:
                 # Zoom sessions have their own priority
                 return (1, 0)
@@ -728,8 +728,8 @@ class ScheduleOptimizer:
 
 def parse_appointments(data: Dict) -> List[Appointment]:
     """Parse appointment data from input format."""
-    # Modify this array to only include days you want to support
-    weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]  # Remove "Friday"
+    # FIXED: Modify this array to only include days you want to support (0-4)
+    weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]
     appointments = []
 
     logger.info(f"Parsing appointments from input data with {len(data.get('appointments', []))} appointments")
@@ -768,7 +768,7 @@ def parse_appointments(data: Dict) -> List[Appointment]:
 
             day_index = weekday_names.index(day_name)
 
-            # Skip days that fall outside the valid range (0-4 now, since we removed Friday)
+            # Skip days that fall outside the valid range (0-4)
             if day_index >= 5:
                 logger.warning(f"Skipping day with index {day_index} (not supported) for appointment {app_id}")
                 continue
@@ -872,7 +872,7 @@ def can_place_appointment_with_travel(appointment: Appointment, day_index: int,
     start, end = block
     day_list = day_appointments[day_index]
 
-    # Find insertion point
+    # Find insertion point for sorted order
     insert_pos = 0
     for i, (a_start, a_end, a_type) in enumerate(day_list):
         if a_start >= start:
@@ -893,39 +893,64 @@ def can_place_appointment_with_travel(appointment: Appointment, day_index: int,
 
     # Check travel time needed before
     travel_needed_before = False
-    if appointment.type not in ["zoom", "trial_zoom"]:
+    if appointment.is_street_session:
         # Field appointment
-        field_placed = any(a_type not in ["zoom", "trial_zoom"] for (_, _, a_type) in day_list)
-        if not field_placed:
-            travel_needed_before = True
-        elif prev_app_type in ["zoom", "trial_zoom"]:
+        if prev_app_type in ["zoom", "trial_zoom"]:
             travel_needed_before = True
     else:
         # Zoom appointment
-        if prev_app_type and prev_app_type not in ["zoom", "trial_zoom"]:
+        if prev_app_type and prev_app_type in ["streets", "field", "trial_streets"]:
             travel_needed_before = True
+
+    # FIXED: Check if we need travel time between trial/regular of same type
+    if prev_app_type:
+        # If previous is trial and current is regular of same category, or vice versa, need travel time
+        prev_is_trial = prev_app_type.startswith("trial_")
+        current_is_trial = appointment.type.startswith("trial_")
+
+        prev_base_type = prev_app_type.replace("trial_", "")
+        current_base_type = appointment.type.replace("trial_", "")
+
+        if prev_base_type == current_base_type and prev_is_trial != current_is_trial:
+            travel_needed_before = True
+            logger.debug(f"Travel needed between {prev_app_type} and {appointment.type}")
 
     # Check travel time needed after
     travel_needed_after = False
-    if appointment.type not in ["zoom", "trial_zoom"]:
+    if appointment.is_street_session:
         # Field appointment
         if next_app_type in ["zoom", "trial_zoom"]:
             travel_needed_after = True
     else:
         # Zoom appointment
-        if next_app_type and next_app_type not in ["zoom", "trial_zoom"]:
+        if next_app_type and next_app_type in ["streets", "field", "trial_streets"]:
             travel_needed_after = True
+
+    # FIXED: Same check for after the appointment
+    if next_app_type:
+        # If next is trial and current is regular of same category, or vice versa, need travel time
+        next_is_trial = next_app_type.startswith("trial_")
+        current_is_trial = appointment.type.startswith("trial_")
+
+        next_base_type = next_app_type.replace("trial_", "")
+        current_base_type = appointment.type.replace("trial_", "")
+
+        if next_base_type == current_base_type and next_is_trial != current_is_trial:
+            travel_needed_after = True
+            logger.debug(f"Travel needed between {appointment.type} and {next_app_type}")
 
     # Validate free gap before
     if travel_needed_before:
-        gap_start = day_start_time(settings, day_index) if prev_app_end is None else prev_app_end
+        gap_start = prev_app_end
         gap_end = start
         gap_needed = timedelta(minutes=settings.travel_time)
 
-        if gap_end - gap_start < gap_needed:
-            return False
-        if not check_free_gap(calendar, day_index, gap_start, gap_end):
-            return False
+        if gap_start and gap_end:
+            gap_minutes = (gap_end - gap_start).total_seconds() / 60
+            if gap_end - gap_start < gap_needed:
+                logger.debug(f"Block rejected: insufficient travel time before "
+                           f"({gap_minutes} min, need {settings.travel_time} min)")
+                return False
 
     # Validate free gap after
     if travel_needed_after:
@@ -933,10 +958,11 @@ def can_place_appointment_with_travel(appointment: Appointment, day_index: int,
         gap_end = next_app_start
         gap_needed = timedelta(minutes=settings.travel_time)
 
-        if gap_start is not None and gap_end is not None:
+        if gap_start and gap_end:
+            gap_minutes = (gap_end - gap_start).total_seconds() / 60
             if gap_end - gap_start < gap_needed:
-                return False
-            if not check_free_gap(calendar, day_index, gap_start, gap_end):
+                logger.debug(f"Block rejected: insufficient travel time after "
+                           f"({gap_minutes} min, need {settings.travel_time} min)")
                 return False
 
     return True
@@ -956,12 +982,17 @@ def can_place_block(appointment: Appointment, day_index: int,
         f"Checking if can place block: ID={appointment.id}, Type={appointment.type}, Day={day_index}, "
         f"Time={start}-{end}")
 
-    if day_index not in calendar:
-        logger.warning(f"Invalid day_index {day_index}, skipping this appointment: {appointment}")
+    # First, check if day_index is valid (0-4 only)
+    if day_index not in calendar or day_index >= 5:
+        logger.warning(f"Block rejected: invalid day_index {day_index}, skipping this appointment: {appointment.id}")
         return False
 
     # Check if any slot is already occupied
     slots = [slot for slot in calendar[day_index] if start <= slot.start_time < end]
+    if not slots:
+        logger.debug(f"Block rejected: no slots found in time range")
+        return False
+
     if any(slot.client_id is not None for slot in slots):
         logger.debug(f"Block rejected: slots already occupied")
         return False
@@ -985,7 +1016,7 @@ def can_place_block(appointment: Appointment, day_index: int,
         # Check if this would create an isolated street session (unless ignored)
         if not ignore_isolation:
             street_sessions_count = sum(1 for _, _, a_type in day_appointments[day_index]
-                                        if a_type in ["streets", "field"])
+                                       if a_type in ["streets", "field"])
             trial_sessions_count = sum(1 for _, _, a_type in day_appointments[day_index]
                                        if a_type == "trial_streets")
 
@@ -1004,14 +1035,21 @@ def can_place_block(appointment: Appointment, day_index: int,
 
             logger.debug(f"Sessions count: existing={existing_sessions}, after placement={new_sessions}")
 
-            # KEY FIX: If this is a trial_streets appointment, it counts as 2 sessions by itself
+            # FIXED: If this is a trial_streets appointment, it counts as 2 sessions by itself
             # So it should never be considered "isolated"
             if appointment.type == "trial_streets":
                 logger.debug(f"Trial streets session allowed on its own (counts as 2)")
-                # Trial sessions are never isolated - they count as 2 by themselves
+                # No need for additional check - trial sessions count as 2
             elif existing_sessions == 0 and new_sessions < 2:
                 logger.debug(f"Block rejected: would create isolated street session")
                 return False
+
+    # FIXED: Check for overlapping appointments - more strict check
+    for existing_start, existing_end, _ in day_appointments[day_index]:
+        # Check for any overlap
+        if (start < existing_end and end > existing_start):
+            logger.debug(f"Block rejected: overlaps with existing appointment {existing_start}-{existing_end}")
+            return False
 
     # Check travel_time constraints
     if not can_place_appointment_with_travel(appointment, day_index, block, day_appointments, calendar, settings):
@@ -1458,7 +1496,7 @@ def smart_pairing_schedule_appointments(appointments: List[Appointment],
         logger.debug("Test case for IDs 1-7 detected, special handling applied")
 
         # We can add some optimizations here for the specific test case
-        expected_appointments = set(["1", "2", "3", "4", "5", "6", "7"])
+        expected_appointments = {"1", "2", "3", "4", "5", "6", "7"}
         scheduled_appointments = set(final_schedule.keys())
 
         # If we're missing any of the expected appointments, check if we can add them
@@ -1498,7 +1536,7 @@ def schedule_appointments(appointments: List[Appointment],
                           settings: ScheduleSettings,
                           is_test: bool = False) -> Tuple[bool, Dict[str, Tuple], List[Appointment]]:
     """
-    Main scheduling function that uses the smart_pairing algorithm.
+    Main scheduling function that uses a phased approach for optimal scheduling.
 
     Args:
         appointments: List of appointments to schedule
@@ -1515,14 +1553,6 @@ def schedule_appointments(appointments: List[Appointment],
     zoom_count = sum(1 for a in appointments if not a.is_street_session)
     logger.info(f"Appointment breakdown: {street_count} street/field, {zoom_count} zoom")
 
-    # Split appointments by type
-    street_appointments = [a for a in appointments if a.is_street_session]
-    zoom_appointments = [a for a in appointments if not a.is_street_session]
-
-    # Sort by priority
-    street_appointments.sort(key=lambda a: 0 if a.priority == "High" else 1 if a.priority == "Medium" else 2)
-    zoom_appointments.sort(key=lambda a: 0 if a.priority == "High" else 1 if a.priority == "Medium" else 2)
-
     # Initialize
     calendar = initialize_calendar(settings)
     used_field_hours = [0] * 6
@@ -1530,70 +1560,260 @@ def schedule_appointments(appointments: List[Appointment],
     final_schedule = {}
     all_unscheduled = []
 
-    # Step 1: Schedule street sessions with smart pairing
+    # Separate street and zoom appointments and sort them
+    street_appointments = [a for a in appointments if a.is_street_session]
+    zoom_appointments = [a for a in appointments if not a.is_street_session]
+
+    # Sort by priority and then by constraints (fewer options first)
+    for appointment_list in [street_appointments, zoom_appointments]:
+        appointment_list.sort(key=lambda a: (
+            0 if a.priority == "High" else 1 if a.priority == "Medium" else 2,
+            -sum(len(day_data["blocks"]) for day_data in a.days)  # Negative to put more constrained first
+        ))
+
+    # Create a helper function to find optimal block pair with small gaps
+    def find_optimal_block_pair(app1, app2, day_index):
+        best_gap = MAX_GAP_BETWEEN_STREET_SESSIONS
+        best_pair = None
+
+        for block1 in [b for d in app1.days if d["day_index"] == day_index for b in d["blocks"]]:
+            for block2 in [b for d in app2.days if d["day_index"] == day_index for b in d["blocks"]]:
+                # Skip if blocks are the same
+                if block1 == block2:
+                    continue
+
+                # Determine the order (earliest first)
+                if block1[0] <= block2[0]:
+                    first_block, second_block = block1, block2
+                    first_app, second_app = app1, app2
+                else:
+                    first_block, second_block = block2, block1
+                    first_app, second_app = app2, app1
+
+                # Calculate gap
+                gap_minutes = (second_block[0] - first_block[1]).total_seconds() / 60
+
+                # Check if this gap is better than our best so far
+                if 0 <= gap_minutes <= best_gap:
+                    # Create a temporary copy of the calendar to test placement
+                    temp_calendar = copy_calendar(calendar)
+                    temp_used_hours = used_field_hours.copy()
+                    temp_day_apps = {d: list(day_appointments[d]) for d in range(6)}
+                    temp_schedule = {}
+
+                    # Try to place first appointment
+                    if can_place_block(first_app, day_index, first_block, temp_calendar,
+                                       temp_used_hours, settings, temp_day_apps, ignore_isolation=True):
+                        place_block(first_app, day_index, first_block, temp_calendar,
+                                    temp_used_hours, temp_schedule, temp_day_apps)
+
+                        # Try to place second appointment
+                        if can_place_block(second_app, day_index, second_block, temp_calendar,
+                                           temp_used_hours, settings, temp_day_apps):
+                            best_gap = gap_minutes
+                            best_pair = ((first_app, first_block), (second_app, second_block))
+
+        return best_pair
+
+    # PHASE 1: First, schedule optimal street session pairs by day
+    pre_assigned_ids = set()
     if street_appointments:
-        # Find optimal pairings for street sessions
-        street_only_optimizer = ScheduleOptimizer(settings)
-        street_success, street_schedule, street_unscheduled = street_only_optimizer.schedule(street_appointments)
+        # Group streets by day first
+        day_to_street_apps = {}
+        for app in street_appointments:
+            for day_data in app.days:
+                day_index = day_data["day_index"]
+                if day_index not in day_to_street_apps:
+                    day_to_street_apps[day_index] = []
+                day_to_street_apps[day_index].append(app)
 
-        # Incorporate street results into main schedule
-        final_schedule.update(street_schedule)
-        all_unscheduled.extend(street_unscheduled)
+        # For each day, find and place optimal pairs of street sessions
+        for day_index, day_apps in day_to_street_apps.items():
+            if len(day_apps) >= 2:
+                # Try all pairs to find the ones with the smallest gaps
+                valid_pairs = []
+                for i in range(len(day_apps)):
+                    for j in range(i + 1, len(day_apps)):
+                        app1 = day_apps[i]
+                        app2 = day_apps[j]
 
-        # Update calendar and day_appointments with street schedules
-        for app_id, (start, end, app_type) in street_schedule.items():
-            day_index = start.weekday()
-            # Find slots in this time range
-            if day_index not in calendar:
-                logger.warning(f"Invalid day_index {day_index}, skipping this appointment: {app_id}")
-                continue
+                        # Skip if already assigned
+                        if app1.id in pre_assigned_ids or app2.id in pre_assigned_ids:
+                            continue
 
-            slots = [slot for slot in calendar[day_index] if start <= slot.start_time < end]
-            for slot in slots:
-                slot.client_id = app_id
+                        pair = find_optimal_block_pair(app1, app2, day_index)
+                        if pair:
+                            valid_pairs.append(pair)
 
-            # Add to day appointments
-            day_appointments[day_index].append((start, end, app_type))
+                # Sort pairs by gap
+                valid_pairs.sort(key=lambda p: (p[1][1][0] - p[0][1][1]).total_seconds())
 
-            # Update used field hours
-            app = next((a for a in street_appointments if a.id == app_id), None)
-            if app and app.is_street_session:
-                effective_hours = app.effective_hours
-                used_field_hours[day_index] += effective_hours
+                # Place pairs until we have at least 2 sessions per day
+                sessions_on_day = 0
+                for pair in valid_pairs:
+                    (app1, block1), (app2, block2) = pair
 
-    # Step 2: Schedule zoom appointments
-    if zoom_appointments:
-        # Create a new optimizer or reuse the existing one
-        zoom_optimizer = ScheduleOptimizer(settings)
-        zoom_optimizer.calendar = calendar  # Use updated calendar
-        zoom_optimizer.used_field_hours = used_field_hours  # Use updated field hours
-        zoom_optimizer.day_appointments = day_appointments  # Use updated day appointments
+                    # Skip if already assigned
+                    if app1.id in pre_assigned_ids or app2.id in pre_assigned_ids:
+                        continue
 
-        # Schedule zoom appointments
-        zoom_success, zoom_schedule, zoom_unscheduled = zoom_optimizer.schedule(zoom_appointments)
+                    # Try to place the pair
+                    if can_place_block(app1, day_index, block1, calendar, used_field_hours,
+                                       settings, day_appointments, ignore_isolation=True):
+                        place_block(app1, day_index, block1, calendar, used_field_hours,
+                                    final_schedule, day_appointments)
+                        pre_assigned_ids.add(app1.id)
+                        sessions_on_day += 1
 
-        # Incorporate zoom results into main schedule
-        final_schedule.update(zoom_schedule)
-        all_unscheduled.extend(zoom_unscheduled)
+                        if can_place_block(app2, day_index, block2, calendar, used_field_hours,
+                                           settings, day_appointments):
+                            place_block(app2, day_index, block2, calendar, used_field_hours,
+                                        final_schedule, day_appointments)
+                            pre_assigned_ids.add(app2.id)
+                            sessions_on_day += 1
 
-    # Step 3: Validate the final schedule
+                    # If we've placed at least 2 sessions, we can move to the next day
+                    if sessions_on_day >= 2:
+                        break
+
+    # PHASE 2: Schedule trial streets (which count as 2)
+    for app in street_appointments:
+        if app.id in pre_assigned_ids or app.type != "trial_streets":
+            continue
+
+        for day_data in app.days:
+            day_index = day_data["day_index"]
+            for block in day_data["blocks"]:
+                if can_place_block(app, day_index, block, calendar,
+                                   used_field_hours, settings,
+                                   day_appointments):
+                    place_block(app, day_index, block, calendar,
+                                used_field_hours, final_schedule,
+                                day_appointments)
+                    pre_assigned_ids.add(app.id)
+                    break
+
+            if app.id in pre_assigned_ids:
+                break
+
+    # PHASE 3: Schedule remaining street sessions, prioritizing days that already have street sessions
+    for app in street_appointments:
+        if app.id in pre_assigned_ids:
+            continue
+
+        best_score = float('inf')
+        best_placement = None
+
+        for day_data in app.days:
+            day_index = day_data["day_index"]
+
+            # Check if this day already has street sessions
+            existing_street_count = sum(1 for _, _, t in day_appointments[day_index]
+                                        if t in ["streets", "field", "trial_streets"])
+
+            for block in day_data["blocks"]:
+                if can_place_block(app, day_index, block, calendar,
+                                   used_field_hours, settings,
+                                   day_appointments):
+                    # Base score on existing sessions and gaps
+                    score = score_candidate(day_index, block, app, day_appointments)
+
+                    # Heavily prioritize days with existing street sessions
+                    if existing_street_count > 0:
+                        score -= 1000
+
+                    # Check specific gap constraints with other street sessions
+                    for a_start, a_end, a_type in day_appointments[day_index]:
+                        if a_type in ["streets", "field", "trial_streets"]:
+                            # If this block comes after existing session
+                            if block[0] > a_end:
+                                gap_minutes = (block[0] - a_end).total_seconds() / 60
+                                # Heavily penalize gaps over MAX_GAP
+                                if gap_minutes > MAX_GAP_BETWEEN_STREET_SESSIONS:
+                                    score += 500 + (gap_minutes - MAX_GAP_BETWEEN_STREET_SESSIONS) * 10
+                                # Prefer gaps around 15-30 minutes
+                                elif 15 <= gap_minutes <= MAX_GAP_BETWEEN_STREET_SESSIONS:
+                                    score -= 200
+
+                            # If this block comes before existing session
+                            elif block[1] < a_start:
+                                gap_minutes = (a_start - block[1]).total_seconds() / 60
+                                # Heavily penalize gaps over MAX_GAP
+                                if gap_minutes > MAX_GAP_BETWEEN_STREET_SESSIONS:
+                                    score += 500 + (gap_minutes - MAX_GAP_BETWEEN_STREET_SESSIONS) * 10
+                                # Prefer gaps around 15-30 minutes
+                                elif 15 <= gap_minutes <= MAX_GAP_BETWEEN_STREET_SESSIONS:
+                                    score -= 200
+
+                    if score < best_score:
+                        best_score = score
+                        best_placement = (day_index, block)
+
+        if best_placement:
+            day_index, block = best_placement
+            place_block(app, day_index, block, calendar,
+                        used_field_hours, final_schedule,
+                        day_appointments)
+            pre_assigned_ids.add(app.id)
+        else:
+            all_unscheduled.append(app)
+
+    # PHASE 4: Now schedule zoom & trial_zoom appointments
+    # First, prioritize trial_zoom
+    for app_type in ["trial_zoom", "zoom"]:
+        for app in [a for a in zoom_appointments if a.type == app_type]:
+            best_score = float('inf')
+            best_placement = None
+
+            for day_data in app.days:
+                day_index = day_data["day_index"]
+                for block in day_data["blocks"]:
+                    if can_place_block(app, day_index, block, calendar,
+                                       used_field_hours, settings,
+                                       day_appointments):
+                        # Score based on travel time constraints and distribution
+                        score = score_candidate(day_index, block, app, day_appointments)
+
+                        # Prefer days with no street sessions for zoom
+                        street_count = sum(1 for _, _, t in day_appointments[day_index]
+                                           if t in ["streets", "field", "trial_streets"])
+                        if street_count == 0:
+                            score -= 300
+
+                        # Prefer days with fewer zoom sessions already
+                        zoom_count = sum(1 for _, _, t in day_appointments[day_index]
+                                         if t in ["zoom", "trial_zoom"])
+                        score += zoom_count * 50
+
+                        if score < best_score:
+                            best_score = score
+                            best_placement = (day_index, block)
+
+            if best_placement:
+                day_index, block = best_placement
+                place_block(app, day_index, block, calendar,
+                            used_field_hours, final_schedule,
+                            day_appointments)
+            else:
+                all_unscheduled.append(app)
+
+    # Validate the schedule
     validation = validate_schedule(final_schedule)
     if not validation["valid"]:
         logger.warning("Schedule validation failed:")
         for issue in validation["issues"]:
             logger.warning(f"  - {issue}")
 
-    # Log final results
+    # Log scheduling results
     scheduled_streets = sum(1 for _, (_, _, app_type) in final_schedule.items()
                             if app_type in ["streets", "field", "trial_streets"])
     scheduled_zooms = sum(1 for _, (_, _, app_type) in final_schedule.items()
                           if app_type in ["zoom", "trial_zoom"])
+
     logger.info(
         f"Scheduled: {scheduled_streets}/{street_count} street sessions, {scheduled_zooms}/{zoom_count} zoom sessions")
 
-    # Create result
-    success = validation["valid"] and len(all_unscheduled) < len(appointments)
-    return success, final_schedule, all_unscheduled
+    return validation["valid"], final_schedule, all_unscheduled
 
 
 def validate_schedule(final_schedule: Dict[str, Tuple]) -> Dict:
@@ -1611,7 +1831,20 @@ def validate_schedule(final_schedule: Dict[str, Tuple]) -> Dict:
     client_days = {}
 
     for app_id, (start, end, app_type) in final_schedule.items():
-        day_index = start.weekday()
+        # FIXED: Convert Python weekday to our system (Sunday=0, Monday=1, etc.)
+        # Python weekday: Monday=0, Tuesday=1, ..., Sunday=6
+        # Our system: Sunday=0, Monday=1, ..., Thursday=4
+        python_weekday = start.weekday()
+        if python_weekday == 6:  # Python Sunday (6) -> Our Sunday (0)
+            day_index = 0
+        else:  # Python Monday-Saturday (0-5) -> Our Monday-Saturday (1-6)
+            day_index = python_weekday + 1
+
+        # Skip days outside our valid range (0-4)
+        if day_index >= 5:
+            validation_results["valid"] = False
+            validation_results["issues"].append(f"Appointment {app_id} scheduled on invalid day {day_index}")
+            continue
 
         # Initialize day if not exists
         if day_index not in days_schedule:
@@ -1633,7 +1866,6 @@ def validate_schedule(final_schedule: Dict[str, Tuple]) -> Dict:
 
         # Skip check for test-specific weekday named clients
         weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Day"]
-        valid_day_indices = range(6)  # Days 0-5 (Sunday through Friday)
         if client_id not in weekday_names:
             if client_id not in client_days:
                 client_days[client_id] = {}
@@ -1641,11 +1873,40 @@ def validate_schedule(final_schedule: Dict[str, Tuple]) -> Dict:
                 client_days[client_id][day_index] = []
             client_days[client_id][day_index].append((start, end))
 
-    # Check for isolated street sessions - skip days with trial sessions
+    # Check for isolated street sessions - FIXED: correctly account for trial sessions
     for day, types in days_schedule.items():
-        if len(types["trial_streets"]) == 0 and len(types["streets"]) == 1:
+        street_count = len(types["streets"])
+        trial_count = len(types["trial_streets"])
+
+        # If there's no trial session and only one street session, it's isolated
+        if trial_count == 0 and street_count == 1:
             validation_results["valid"] = False
-            validation_results["issues"].append(f"Day {day} has only one street session")
+            validation_results["issues"].append(f"Day {day} has only one street session (isolated)")
+
+        # If there are street sessions but no trials, need at least 2
+        if street_count > 0 and trial_count == 0 and street_count < 2:
+            validation_results["valid"] = False
+            validation_results["issues"].append(f"Day {day} has {street_count} street sessions but needs at least 2")
+
+    # Check for overlapping sessions
+    for day, types in days_schedule.items():
+        all_sessions = []
+        for session_type in ["streets", "trial_streets", "zoom", "trial_zoom"]:
+            all_sessions.extend(types[session_type])
+
+        # Sort by start time
+        all_sessions.sort(key=lambda x: x[0])
+
+        # Check for overlaps
+        for i in range(len(all_sessions) - 1):
+            current_end = all_sessions[i][1]
+            next_start = all_sessions[i + 1][0]
+            if current_end > next_start:
+                validation_results["valid"] = False
+                current_id = all_sessions[i][2]
+                next_id = all_sessions[i + 1][2]
+                validation_results["issues"].append(
+                    f"Day {day} has overlapping sessions: {current_id} and {next_id}")
 
     # Check for large gaps between street sessions
     for day, types in days_schedule.items():
@@ -1658,6 +1919,49 @@ def validate_schedule(final_schedule: Dict[str, Tuple]) -> Dict:
                 if gap > MAX_GAP_BETWEEN_STREET_SESSIONS:
                     validation_results["valid"] = False
                     validation_results["issues"].append(f"Day {day} has a gap of {gap} minutes between street sessions")
+
+    # Check for insufficient travel time between different types
+    for day, types in days_schedule.items():
+        all_sessions = []
+        for session_type in ["streets", "trial_streets", "zoom", "trial_zoom"]:
+            for session in types[session_type]:
+                all_sessions.append((*session, session_type))
+
+        # Sort by start time
+        all_sessions.sort(key=lambda x: x[0])
+
+        # Check travel time between sessions
+        for i in range(len(all_sessions) - 1):
+            current_end = all_sessions[i][1]
+            next_start = all_sessions[i + 1][0]
+            current_type = all_sessions[i][3]
+            next_type = all_sessions[i + 1][3]
+
+            # Check if travel time is needed
+            travel_needed = False
+
+            # Check between street/zoom transitions
+            if (current_type in ["streets", "trial_streets"] and next_type in ["zoom", "trial_zoom"]) or \
+                    (current_type in ["zoom", "trial_zoom"] and next_type in ["streets", "trial_streets"]):
+                travel_needed = True
+
+            # FIXED: Check between trial/regular of same type
+            current_is_trial = current_type.startswith("trial_")
+            next_is_trial = next_type.startswith("trial_")
+
+            current_base_type = current_type.replace("trial_", "")
+            next_base_type = next_type.replace("trial_", "")
+
+            if current_base_type == next_base_type and current_is_trial != next_is_trial:
+                travel_needed = True
+
+            # Validate travel time if needed
+            if travel_needed:
+                gap = (next_start - current_end).total_seconds() / 60
+                if gap < TRAVEL_TIME_BETWEEN_TYPES:
+                    validation_results["valid"] = False
+                    validation_results["issues"].append(
+                        f"Day {day} has insufficient travel time ({gap} min) between {current_type} and {next_type}")
 
     # Check for multiple appointments for same client in one day
     for client, days in client_days.items():
@@ -1765,8 +2069,8 @@ def backtrack_schedule(appointments: List[Appointment],
                        final_schedule: Optional[Dict[str, Tuple]] = None,
                        day_appointments: Optional[Dict[int, List[Tuple]]] = None,
                        recursion_depth: int = 0,
-                       pre_assigned_ids: Optional[List[str]] = None) -> Tuple[
-    bool, List[Appointment], Dict[str, Tuple]]:
+                       pre_assigned_ids: Optional[Set[str]] = None) \
+        -> Tuple[bool, List[Appointment]]:
     """
     Backtracking algorithm to schedule appointments with constraints.
     Handles priority levels and type fairness.
@@ -1778,7 +2082,7 @@ def backtrack_schedule(appointments: List[Appointment],
     if day_appointments is None:
         day_appointments = {d: [] for d in range(6)}
     if pre_assigned_ids is None:
-        pre_assigned_ids = []
+        pre_assigned_ids = set()
 
     logger.debug(f"Backtracking: index={index}, total={len(appointments)}")
 
@@ -1792,10 +2096,10 @@ def backtrack_schedule(appointments: List[Appointment],
             # If there's a trial session, it counts as 2 and is never isolated
             if trial_count == 0 and street_count == 1:
                 logger.debug(f"Schedule validation failed: Day {day} has isolated street session")
-                return False, unscheduled_tasks, final_schedule
+                return False, unscheduled_tasks
 
         logger.debug("Schedule validation successful")
-        return True, unscheduled_tasks, final_schedule
+        return True, unscheduled_tasks
 
     appointment = appointments[index]
 
@@ -1808,71 +2112,23 @@ def backtrack_schedule(appointments: List[Appointment],
             recursion_depth, pre_assigned_ids
         )
 
-    # Calculate type fairness to prioritize underrepresented types
-    type_counts = {"streets": 0, "trial_streets": 0, "zoom": 0, "trial_zoom": 0, "field": 0}
-    type_totals = {"streets": 0, "trial_streets": 0, "zoom": 0, "trial_zoom": 0, "field": 0}
-
-    # Count scheduled appointments by type
-    for _, (_, _, app_type) in final_schedule.items():
-        mapped_type = app_type if app_type in type_counts else "zoom"  # Default for unknown types
-        type_counts[mapped_type] += 1
-
-    # Count total appointments by type
-    for app in appointments:
-        app_type = app.type
-        if app_type in type_totals:
-            type_totals[app_type] += 1
-
-    # Calculate type fairness boost - prioritize underrepresented types
-    current_type = appointment.type
-    total_of_type = type_totals.get(current_type, 0)
-    scheduled_of_type = type_counts.get(current_type, 0)
-
-    # Fairness boost for underrepresented types
-    fairness_boost = 0
-    if total_of_type > 0:
-        scheduling_rate = scheduled_of_type / total_of_type
-        if current_type in ["zoom", "trial_zoom"]:
-            # Stronger boost for zoom appointments
-            if scheduling_rate < 0.5:
-                fairness_boost = 300  # Higher boost for zoom
-            elif scheduling_rate < 0.7:
-                fairness_boost = 150
-        else:
-            # Standard boost for other types
-            if scheduling_rate < 0.3:
-                fairness_boost = 200
-            elif scheduling_rate < 0.5:
-                fairness_boost = 100
-
-    # Gather all day/block possibilities for current appointment
+    # Find all valid placement options
     candidates = []
     for day_data in appointment.days:
         day_index = day_data["day_index"]
         for block in day_data["blocks"]:
-            if can_place_block(appointment, day_index, block, calendar, used_field_hours, settings, day_appointments):
+            if can_place_block(appointment, day_index, block, calendar, used_field_hours,
+                               settings, day_appointments):
                 # Score each candidate - lower is better
-                base_score = score_candidate(day_index, block, appointment, day_appointments)
-                # Apply fairness boost (lower score is better, so subtract)
-                adjusted_score = base_score - fairness_boost
-                candidates.append((day_index, block, adjusted_score))
+                score = score_candidate(day_index, block, appointment, day_appointments)
+                candidates.append((day_index, block, score))
 
     if not candidates:
         # If no placement found:
         if appointment.priority == "High":
-            return False, unscheduled_tasks, final_schedule
-        elif appointment.priority == "Medium":
-            if recursion_depth == 0:
-                return False, unscheduled_tasks, final_schedule
-            else:
-                unscheduled_tasks.append(appointment)
-                return backtrack_schedule(
-                    appointments, calendar, used_field_hours, settings,
-                    index + 1, unscheduled_tasks, final_schedule, day_appointments,
-                    0, pre_assigned_ids
-                )
+            return False, unscheduled_tasks
         else:
-            # Low priority -> just skip
+            # Medium or Low priority -> add to unscheduled
             unscheduled_tasks.append(appointment)
             return backtrack_schedule(
                 appointments, calendar, used_field_hours, settings,
@@ -1880,52 +2136,56 @@ def backtrack_schedule(appointments: List[Appointment],
                 0, pre_assigned_ids
             )
 
-    # Sort candidates by adjusted score (lowest first)
+    # Sort candidates by score (lowest/best first)
     candidates.sort(key=lambda x: x[2])
 
     # Try each candidate block
     for (day_index, block, _) in candidates:
+        # Save state before placing
         old_field_hours = used_field_hours[day_index]
-        saved_day_appointments = [list(day_appointments[d]) for d in range(6)]
+        saved_day_appointments = {d: list(day_appointments[d]) for d in range(6)}
+        saved_calendar = copy_calendar(calendar)
+        saved_schedule = dict(final_schedule)
 
-        place_block(appointment, day_index, block, calendar, used_field_hours,
-                    final_schedule, day_appointments)
+        # Place the appointment
+        placed = place_block(appointment, day_index, block, calendar, used_field_hours,
+                             final_schedule, day_appointments)
 
-        next_recursion_depth = recursion_depth + 1 if appointment.priority == "Medium" else 0
+        if not placed:
+            logger.debug(f"Failed to place block for appointment {appointment.id}")
+            continue
 
-        success, unsched_after, final_after = backtrack_schedule(
+        # Recur to next appointment
+        success, unsched_after = backtrack_schedule(
             appointments, calendar, used_field_hours, settings,
             index + 1, unscheduled_tasks, final_schedule, day_appointments,
-            next_recursion_depth, pre_assigned_ids
+            recursion_depth, pre_assigned_ids
         )
 
         if success:
-            return True, unsched_after, final_after
+            return True, unsched_after
         else:
             # Restore previous state
-            remove_block(appointment, day_index, block, calendar, used_field_hours,
-                         final_schedule, day_appointments)
             used_field_hours[day_index] = old_field_hours
             for d in range(6):
                 day_appointments[d] = saved_day_appointments[d]
 
+            # Restore calendar
+            for d in range(6):
+                if d in calendar and d in saved_calendar:
+                    calendar[d] = saved_calendar[d]
+
+            # Restore final schedule
+            if appointment.id in final_schedule:
+                del final_schedule[appointment.id]
+            for app_id in list(final_schedule.keys()):
+                if app_id not in saved_schedule:
+                    del final_schedule[app_id]
+
     # If no candidate block works
-    if appointment.priority == "High":
-        return False, unscheduled_tasks, final_schedule
-    elif appointment.priority == "Medium":
-        if recursion_depth == 0:
-            return False, unscheduled_tasks, final_schedule
-        else:
-            unscheduled_tasks.append(appointment)
-            return backtrack_schedule(
-                appointments, calendar, used_field_hours, settings,
-                index + 1, unscheduled_tasks, final_schedule, day_appointments,
-                0, pre_assigned_ids
-            )
-    else:
-        unscheduled_tasks.append(appointment)
-        return backtrack_schedule(
-            appointments, calendar, used_field_hours, settings,
-            index + 1, unscheduled_tasks, final_schedule, day_appointments,
-            0, pre_assigned_ids
-        )
+    unscheduled_tasks.append(appointment)
+    return backtrack_schedule(
+        appointments, calendar, used_field_hours, settings,
+        index + 1, unscheduled_tasks, final_schedule, day_appointments,
+        0, pre_assigned_ids
+    )
