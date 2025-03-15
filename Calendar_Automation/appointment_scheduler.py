@@ -57,22 +57,101 @@ def day_number_to_name(day_number):
 def get_working_hours(day_number):
     """Return working hours for the given day as (start_minute, end_minute)."""
     if 0 <= day_number <= 4:  # Sunday to Thursday
-        return 10 * 60, 23 * 60  # 10:00 to 23:00
+        return (10 * 60, 23 * 60)  # 10:00 to 23:00
     elif day_number == 5:  # Friday
-        return 12 * 60 + 30, 17 * 60  # 12:30 to 17:00
+        return (12 * 60 + 30, 17 * 60)  # 12:30 to 17:00
     else:  # Saturday
         return None  # No working hours on Saturday
 
 
-def schedule_appointments(json_file):
-    """Schedule appointments based on constraints and client availability."""
+def schedule_appointments(json_file, max_street_gap=30):
+    """Schedule appointments based on constraints and client availability.
 
+    Args:
+        json_file (str): Path to the input JSON file
+        max_street_gap (int): Maximum gap in minutes allowed between consecutive street sessions
+    """
     # Load data from JSON file
     with open(json_file, 'r') as f:
         data = json.load(f)
 
     start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
     clients = data['appointments']
+
+    # Print summary of input data
+    print(f"\n=== Input Data Summary ===")
+    print(f"Start date: {start_date.strftime('%Y-%m-%d')} ({day_number_to_name(start_date.weekday())})")
+    print(f"Total clients: {len(clients)}")
+    print(f"Maximum gap between street sessions: {max_street_gap} minutes")
+
+    # Count session types
+    session_counts = {
+        'streets': 0,
+        'trial_streets': 0,
+        'zoom': 0,
+        'trial_zoom': 0
+    }
+    priority_counts = {
+        'High': 0,
+        'Medium': 0,
+        'Low': 0,
+        'Exclude': 0
+    }
+
+    for client in clients:
+        session_type = client['type']
+        priority = client['priority']
+
+        if session_type in session_counts:
+            session_counts[session_type] += 1
+
+        if priority in priority_counts:
+            priority_counts[priority] += 1
+
+    print("\nSession types:")
+    for session_type, count in session_counts.items():
+        print(f"  - {session_type}: {count}")
+
+    print("\nPriority levels:")
+    for priority, count in priority_counts.items():
+        print(f"  - {priority}: {count}")
+
+    # Print client details
+    print("\nClient details:")
+    for client in clients:
+        client_id = client['id']
+        session_type = client['type']
+        priority = client['priority']
+
+        # Skip excluded clients in the detailed list
+        if priority == "Exclude":
+            continue
+
+        # Count available days with time slots
+        available_days = []
+        for day_info in client.get('days', []):
+            day_name = day_info['day']
+            time_frames = day_info.get('time_frames', [])
+
+            # Check if there are any time frames for this day
+            has_time_frames = False
+            if isinstance(time_frames, list) and time_frames:
+                has_time_frames = True
+            elif isinstance(time_frames, dict) and 'start' in time_frames and 'end' in time_frames:
+                has_time_frames = True
+            elif isinstance(time_frames, str) and '-' in time_frames:
+                has_time_frames = True
+
+            if has_time_frames:
+                available_days.append(day_name)
+
+        if available_days:
+            available_days_str = ", ".join(available_days)
+            print(f"  - Client {client_id}: {session_type} (Priority: {priority}) - Available on {available_days_str}")
+        else:
+            print(f"  - Client {client_id}: {session_type} (Priority: {priority}) - No availability")
+
+    print("\n=== Starting Scheduler ===")
 
     # Session type durations
     session_durations = {
@@ -173,11 +252,10 @@ def schedule_appointments(json_file):
 
                             daily_availabilities.append((horizon_start, horizon_end, day_number))
 
-            # Handle case where time_frames is a single string with format "start-end"
-            elif isinstance(time_frames, str) and '-' in time_frames:
-                start_str, end_str = time_frames.split('-')
-                start_time = parse_time(start_str)
-                end_time = parse_time(end_str)
+            # Handle case where time_frames is a dictionary with start/end keys (not in an array)
+            elif isinstance(time_frames, dict) and 'start' in time_frames and 'end' in time_frames:
+                start_time = parse_time(time_frames['start'])
+                end_time = parse_time(time_frames['end'])
 
                 # Adjust start and end times to be within working hours
                 start_time = max(start_time, work_start)
@@ -189,6 +267,12 @@ def schedule_appointments(json_file):
                     horizon_end = day_offset * 24 * 60 + end_time - session_duration
 
                     daily_availabilities.append((horizon_start, horizon_end, day_number))
+
+            # Handle case where time_frames is a single string with format "start-end"
+            elif isinstance(time_frames, str) and '-' in time_frames:
+                start_str, end_str = time_frames.split('-')
+                start_time = parse_time(start_str)
+                end_time = parse_time(end_str)
 
                 # Adjust start and end times to be within working hours
                 start_time = max(start_time, work_start)
@@ -217,6 +301,7 @@ def schedule_appointments(json_file):
 
     for client in client_availabilities:
         client_id = client['id']
+        session_type = client['type']
 
         # Create a variable for the start time of the appointment
         appointment_vars[client_id] = model.NewIntVar(0, horizon_minutes, f'start_{client_id}')
@@ -251,6 +336,7 @@ def schedule_appointments(json_file):
     # Create arrays to track street sessions per day
     days_with_streets = {}
     street_sessions_per_day = {}
+    street_sessions_by_day = {}  # Keep track of street sessions for each day
 
     for day in range(7):
         # Skip Saturday
@@ -258,6 +344,7 @@ def schedule_appointments(json_file):
             continue
 
         street_sessions_for_day = []
+        street_sessions_by_day[day] = []  # Initialize array to store street session clients for this day
 
         for client_id, client in [(c['id'], c) for c in client_availabilities]:
             session_type = client['type']
@@ -275,6 +362,7 @@ def schedule_appointments(json_file):
                 model.AddImplication(is_scheduled_this_day, appointment_scheduled_vars[client_id])
 
                 street_sessions_for_day.append(is_scheduled_this_day)
+                street_sessions_by_day[day].append((client_id, client['duration'], is_scheduled_this_day))
 
         if street_sessions_for_day:
             # Create a variable to count streets sessions on this day
@@ -288,6 +376,35 @@ def schedule_appointments(json_file):
 
             # Enforce the rule: either 0 or at least 2 streets sessions per day
             model.Add(street_sessions_per_day[day] == 0).OnlyEnforceIf(days_with_streets[day].Not())
+
+            # Add constraints to ensure all street sessions on the same day have at most max_street_gap minute gaps
+            if len(street_sessions_by_day[day]) >= 2:
+                for i, (client1_id, client1_duration, is_scheduled1) in enumerate(street_sessions_by_day[day]):
+                    for j, (client2_id, client2_duration, is_scheduled2) in enumerate(street_sessions_by_day[day]):
+                        if i < j:  # Avoid duplicate pairs
+                            # Both sessions are scheduled on this day
+                            both_scheduled_this_day = model.NewBoolVar(f'both_{client1_id}_{client2_id}_on_day_{day}')
+                            model.AddBoolAnd([is_scheduled1, is_scheduled2]).OnlyEnforceIf(both_scheduled_this_day)
+                            model.AddBoolOr([is_scheduled1.Not(), is_scheduled2.Not()]).OnlyEnforceIf(
+                                both_scheduled_this_day.Not())
+
+                            # If both are scheduled on this day, enforce max gap constraint
+                            # First determine which session comes first
+                            client1_before_client2 = model.NewBoolVar(f'{client1_id}_before_{client2_id}_on_day_{day}')
+                            model.Add(appointment_vars[client1_id] < appointment_vars[client2_id]).OnlyEnforceIf(
+                                client1_before_client2)
+                            model.Add(appointment_vars[client1_id] >= appointment_vars[client2_id]).OnlyEnforceIf(
+                                client1_before_client2.Not())
+
+                            # Enforce max gap constraint
+                            model.Add(appointment_vars[client2_id] - (
+                                        appointment_vars[client1_id] + client1_duration) <= max_street_gap) \
+                                .OnlyEnforceIf([both_scheduled_this_day, client1_before_client2])
+
+                            # If client2 is before client1
+                            model.Add(appointment_vars[client1_id] - (
+                                        appointment_vars[client2_id] + client2_duration) <= max_street_gap) \
+                                .OnlyEnforceIf([both_scheduled_this_day, client1_before_client2.Not()])
 
     # Add constraints to prevent scheduling appointments at the same time (no overlaps)
     for i, client1 in enumerate(client_availabilities):
@@ -323,33 +440,13 @@ def schedule_appointments(json_file):
                              appointment_scheduled_vars[client2_id].Not()]).OnlyEnforceIf(both_scheduled.Not())
 
             # If both are scheduled, ensure they don't overlap
-            model.Add(
-                appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]
-            ).OnlyEnforceIf([both_scheduled, client1_before_client2])
-            model.Add(
-                appointment_vars[client2_id] + client2_duration + required_break <= appointment_vars[client1_id]
-            ).OnlyEnforceIf([both_scheduled, client2_before_client1])
+            model.Add(appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]) \
+                .OnlyEnforceIf([both_scheduled, client1_before_client2])
+            model.Add(appointment_vars[client2_id] + client2_duration + required_break <= appointment_vars[client1_id]) \
+                .OnlyEnforceIf([both_scheduled, client2_before_client1])
 
             # Ensure that exactly one of the non-overlap constraints is true if both are scheduled
             model.AddBoolOr([client1_before_client2, client2_before_client1]).OnlyEnforceIf(both_scheduled)
-
-            # Special constraint for consecutive street sessions
-            if client1_type in ['streets', 'trial_streets'] and client2_type in ['streets', 'trial_streets']:
-                # If these are street sessions on the same day, apply the maximum 30-minute gap rule
-                same_day = model.NewBoolVar(f'same_day_{client1_id}_{client2_id}')
-                model.Add(appointment_day_vars[client1_id] == appointment_day_vars[client2_id]).OnlyEnforceIf(same_day)
-                model.Add(appointment_day_vars[client1_id] != appointment_day_vars[client2_id]).OnlyEnforceIf(
-                    same_day.Not())
-
-                # If both are scheduled, on the same day, and are street sessions, enforce max 30-min gap
-                streets_consecutive = model.NewBoolVar(f'streets_consecutive_{client1_id}_{client2_id}')
-                model.AddBoolAnd([both_scheduled, same_day]).OnlyEnforceIf(streets_consecutive)
-
-                # If they should be consecutive, ensure gap is <= 30 minutes
-                model.Add(appointment_vars[client2_id] - (appointment_vars[client1_id] + client1_duration) <= 30) \
-                    .OnlyEnforceIf([streets_consecutive, client1_before_client2])
-                model.Add(appointment_vars[client1_id] - (appointment_vars[client2_id] + client2_duration) <= 30) \
-                    .OnlyEnforceIf([streets_consecutive, client2_before_client1])
 
     # Set up the optimization objective
     objective_terms = []
@@ -358,7 +455,12 @@ def schedule_appointments(json_file):
     for client in client_availabilities:
         client_id = client['id']
         priority = client['priority']
+        # Prioritize client by priority value and add a small weight for lower client IDs
+        # This ensures deterministic behavior when clients have identical constraints
+        client_id_int = int(client_id) if client_id.isdigit() else 0
         objective_terms.append(appointment_scheduled_vars[client_id] * priority * 100)  # Weight by priority
+        objective_terms.append(
+            appointment_scheduled_vars[client_id] * (-client_id_int * 0.1))  # Small preference for lower client IDs
 
     # Maximize the number of days with at least 2 street sessions
     for day in days_with_streets:
@@ -427,6 +529,59 @@ def schedule_appointments(json_file):
         print(f"Street sessions: {street_sessions}")
         print(f"Zoom sessions: {zoom_sessions}")
 
+        # Check for unscheduled clients
+        scheduled_client_ids = set(appt['client_id'] for appt in scheduled_appointments)
+        all_client_ids = set(client['id'] for client in client_availabilities)
+        unscheduled_client_ids = all_client_ids - scheduled_client_ids
+
+        if unscheduled_client_ids:
+            print(f"\nUnscheduled clients: {len(unscheduled_client_ids)}")
+            for client_id in sorted(unscheduled_client_ids):
+                # Find the client data
+                client_data = next((c for c in client_availabilities if c['id'] == client_id), None)
+                if client_data:
+                    priority_value_to_name = {3: "High", 2: "Medium", 1: "Low"}
+                    priority_name = priority_value_to_name.get(client_data['priority'], str(client_data['priority']))
+                    print(f"  - Client ID {client_id}: {client_data['type']} session (Priority: {priority_name})")
+
+                    # Try to determine why this client wasn't scheduled
+                    availability_count = sum(1 for avail in client_data['availabilities'] if avail[1] >= avail[0])
+                    if availability_count == 0:
+                        print(f"    Reason: No valid availability slots")
+                    else:
+                        # Check for conflicts with scheduled appointments
+                        conflicts = []
+                        for appt in scheduled_appointments:
+                            # If both are on the same day
+                            client_days = set(day for _, _, day in client_data['availabilities'])
+                            appt_day = day_name_to_number(appt['day'])
+
+                            if appt_day in client_days:
+                                if client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in ['streets',
+                                                                                                            'trial_streets']:
+                                    conflicts.append(
+                                        f"Potential street session conflict with Client {appt['client_id']} ({appt['day']} {appt['start_time']})")
+                                elif (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in ['zoom',
+                                                                                                               'trial_zoom']) or \
+                                        (client_data['type'] in ['zoom', 'trial_zoom'] and appt['type'] in ['streets',
+                                                                                                            'trial_streets']):
+                                    conflicts.append(
+                                        f"Potential streets-zoom transition with Client {appt['client_id']} ({appt['day']} {appt['start_time']})")
+
+                        if conflicts:
+                            print(f"    Possible conflicts:")
+                            for conflict in conflicts[:3]:  # Limit to first 3 conflicts
+                                print(f"    - {conflict}")
+                            if len(conflicts) > 3:
+                                print(f"    - ...and {len(conflicts) - 3} more potential conflicts")
+                        else:
+                            print(f"    Reason: Likely couldn't fit into schedule while maintaining all constraints")
+                else:
+                    print(f"  - Client ID {client_id}: Unknown details")
+
+        # Print daily schedule header
+        print(f"\n=== Schedule Results ===")
+
         # Print daily schedule
         days_with_appointments = {}
         for appt in scheduled_appointments:
@@ -458,10 +613,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Schedule appointments based on constraints and client availability.')
     parser.add_argument('input_file', type=str, help='Path to the input JSON file')
     parser.add_argument('--output', type=str, default='schedule.json', help='Path to the output JSON file')
+    parser.add_argument('--max-street-gap', type=int, default=30,
+                        help='Maximum gap in minutes allowed between consecutive street sessions (default: 30)')
 
     args = parser.parse_args()
 
-    appointments = schedule_appointments(args.input_file)
+    appointments = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
 
     if appointments:
         export_schedule_to_json(appointments, args.output)
