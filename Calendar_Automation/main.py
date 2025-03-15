@@ -1,8 +1,9 @@
 import uuid
 import logging
+import argparse
 
 from get_input_flow import collect_input_from_monday
-from david_sdk import run_on_file
+from david_sdk import run_on_file  # This will now use the appointment_scheduler.py
 from write_to_monday_flow import write_to_monday
 from etc_functions import should_rerun, unite_output_from_script
 from visualization import generate_html_visualization
@@ -44,6 +45,8 @@ def configure_argument_parser():
     parser.add_argument('--output-file', '-o', type=str, default='scheduling_results.json',
                         help='Output file for test results')
     parser.add_argument('--no-html', action='store_true', help='Disable HTML visualization in test mode')
+    parser.add_argument('--use-legacy', action='store_true',
+                        help='Use the legacy scheduler in calculate.py instead of the OR-Tools scheduler')
     return parser.parse_args()
 
 
@@ -68,6 +71,7 @@ def main():
     args = configure_argument_parser()
 
     logger.info("Starting the main function")
+    logger.info(f"Using OR-Tools scheduler: {not args.use_legacy}")
 
     # Handle input based on mode
     if args.input_file:
@@ -79,13 +83,13 @@ def main():
 
     # Run the scheduling algorithm
     output_from_script = run_on_file(input_file_name)
-    logger.info(f"Initial script run result: {output_from_script}")
+    logger.info(f"Initial script run result: {len(output_from_script.get('filled_appointments', []))} appointments filled")
 
-    # Retry mechanism
+    # Retry mechanism (only if needed - may not be necessary with OR-Tools)
     for i in range(RERUN_HARD_LIMIT):
         logger.info(f"Rerun attempt {i + 1}/{RERUN_HARD_LIMIT}")
         rerun_script = run_on_file(input_file_name)
-        logger.debug(f"Rerun script result: {rerun_script}")
+        logger.debug(f"Rerun script result: {len(rerun_script.get('filled_appointments', []))} appointments filled")
         if not should_rerun(rerun_script):
             logger.info("No rerun required based on the script output.")
             break
