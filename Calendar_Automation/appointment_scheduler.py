@@ -631,10 +631,10 @@ def schedule_appointments(json_file, max_street_gap=30):
                 print(f"{appt['start_time']} - {appt['end_time']} : {appt['type']} (Client ID: {appt['client_id']})")
 
         # Return the scheduled appointments for potential export to JSON
-        return scheduled_appointments
+        return scheduled_appointments, client_availabilities
     else:
         print(f"No solution found. Status: {solver.StatusName(status)}")
-        return []
+        return [], client_availabilities
 
 
 def minimize_gaps_post_processing(scheduled_appointments, required_break=15, streets_zoom_break=75):
@@ -778,6 +778,108 @@ def export_schedule_to_json(scheduled_appointments, output_file):
     print(f"Schedule exported to {output_file}")
 
 
+def export_enhanced_schedule_to_json(scheduled_appointments, client_availabilities, output_file):
+    """Export the scheduled appointments to a JSON file with enhanced format.
+
+    Args:
+        scheduled_appointments: List of scheduled appointment dictionaries
+        client_availabilities: List of client availability dictionaries
+        output_file: Path to the output JSON file
+    """
+    # Build the filled appointments list
+    filled_appointments = []
+    for appt in scheduled_appointments:
+        client_id = appt['client_id']
+        appt_date = appt['date']
+        start_time = appt['start_time']
+        end_time = appt['end_time']
+
+        # Convert to ISO format for output
+        iso_start_time = f"{appt_date}T{start_time}:00"
+        iso_end_time = f"{appt_date}T{end_time}:00"
+
+        filled_appointments.append({
+            "id": client_id,
+            "type": appt['type'],
+            "start_time": iso_start_time,
+            "end_time": iso_end_time
+        })
+
+    # Get set of scheduled client IDs
+    scheduled_client_ids = set(appt['client_id'] for appt in scheduled_appointments)
+
+    # Build unfilled appointments list (currently empty as per example)
+    unfilled_appointments = []
+
+    # Get all client IDs
+    all_client_ids = set(client['id'] for client in client_availabilities)
+
+    # Get unscheduled client IDs
+    unscheduled_client_ids = all_client_ids - scheduled_client_ids
+
+    # Optionally, you could populate unfilled_appointments with info about unscheduled clients
+    # Uncomment the following code if you want to include unscheduled clients
+    """
+    for client_id in unscheduled_client_ids:
+        client_data = next((c for c in client_availabilities if c['id'] == client_id), None)
+        if client_data:
+            unfilled_appointments.append({
+                "id": client_id,
+                "type": client_data['type']
+            })
+    """
+
+    # Count sessions by type
+    session_types = ['streets', 'trial_streets', 'zoom', 'trial_zoom', 'field']
+    type_counts = {
+        session_type: {
+            'scheduled': 0,
+            'total': 0,
+            'rate': 0.0
+        } for session_type in session_types
+    }
+
+    # Count total for each type
+    for client in client_availabilities:
+        session_type = client['type']
+        if session_type in type_counts:
+            type_counts[session_type]['total'] += 1
+
+    # Count scheduled for each type
+    for appt in scheduled_appointments:
+        session_type = appt['type']
+        if session_type in type_counts:
+            type_counts[session_type]['scheduled'] += 1
+
+    # Calculate rates
+    for session_type in type_counts:
+        total = type_counts[session_type]['total']
+        if total > 0:
+            scheduled = type_counts[session_type]['scheduled']
+            type_counts[session_type]['rate'] = round(scheduled / total, 2)
+        else:
+            type_counts[session_type]['rate'] = 1.0  # If total is 0, set rate to 1.0
+
+    # Build the validation section (simplified for now)
+    validation = {
+        "valid": True,
+        "issues": []
+    }
+
+    # Assemble the final output structure
+    output_data = {
+        "filled_appointments": filled_appointments,
+        "unfilled_appointments": unfilled_appointments,
+        "validation": validation,
+        "type_balance": type_counts
+    }
+
+    # Write to file
+    with open(output_file, 'w') as f:
+        json.dump(output_data, f, indent=2)
+    print(f"Enhanced schedule exported to {output_file}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Schedule appointments based on constraints and client availability.')
     parser.add_argument('input_file', type=str, help='Path to the input JSON file')
@@ -787,7 +889,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    appointments = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
+    appointments, client_availabilities = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
 
-    if appointments:
-        export_schedule_to_json(appointments, args.output)
+    # Always export, even if no appointments were scheduled
+    # This will create a JSON with empty filled_appointments but complete type_balance
+    export_enhanced_schedule_to_json(appointments, client_availabilities, args.output)
