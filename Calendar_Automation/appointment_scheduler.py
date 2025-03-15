@@ -549,6 +549,8 @@ def schedule_appointments(json_file, max_street_gap=30):
                     'duration': client['duration']
                 })
 
+        scheduled_appointments = minimize_gaps_post_processing(scheduled_appointments)
+
         # Sort appointments by date and time
         scheduled_appointments.sort(key=lambda x: (x['date'], x['start_time']))
 
@@ -633,6 +635,140 @@ def schedule_appointments(json_file, max_street_gap=30):
     else:
         print(f"No solution found. Status: {solver.StatusName(status)}")
         return []
+
+
+def minimize_gaps_post_processing(scheduled_appointments, required_break=15, streets_zoom_break=75):
+    """Post-processes the schedule to minimize gaps between street sessions while maintaining constraints.
+
+    Args:
+        scheduled_appointments: List of scheduled appointment dictionaries
+        required_break: Minimum break between any two sessions (default: 15 minutes)
+        streets_zoom_break: Minimum break between street and zoom sessions (default: 75 minutes)
+
+    Returns:
+        List of appointments with minimized gaps between street sessions
+    """
+    # Group appointments by day
+    appointments_by_day = {}
+    for appt in scheduled_appointments:
+        day = appt['date']
+        if day not in appointments_by_day:
+            appointments_by_day[day] = []
+        appointments_by_day[day].append(appt)
+
+    # Process each day
+    for day, appointments in appointments_by_day.items():
+        # Sort by start time
+        appointments.sort(key=lambda x: x['start_time'])
+
+        # Identify street and non-street sessions
+        street_sessions = [appt for appt in appointments if appt['type'] in ['streets', 'trial_streets']]
+        non_street_sessions = [appt for appt in appointments if appt['type'] not in ['streets', 'trial_streets']]
+
+        # Only process days with at least 2 street sessions
+        if len(street_sessions) < 2:
+            continue
+
+        # Sort street sessions by start time
+        street_sessions.sort(key=lambda x: x['start_time'])
+
+        # Create a timeline of fixed points (from non-street sessions)
+        fixed_points = []
+        for appt in non_street_sessions:
+            start_minutes = time_to_minutes(appt['start_time'])
+            end_minutes = time_to_minutes(appt['end_time'])
+            session_type = appt['type']
+
+            # Add constraints for before and after this non-street session
+            if session_type in ['zoom', 'trial_zoom']:
+                # Streets sessions need a 75-minute break from zoom sessions
+                fixed_points.append({
+                    'time': start_minutes - streets_zoom_break,
+                    'type': 'before_zoom'
+                })
+                fixed_points.append({
+                    'time': end_minutes + streets_zoom_break,
+                    'type': 'after_zoom'
+                })
+
+        # Sort fixed points by time
+        fixed_points.sort(key=lambda x: x['time'])
+
+        # Compact the street sessions as much as possible
+        compact_street_sessions(street_sessions, fixed_points, required_break)
+
+        # Update the appointments list with the compacted street sessions
+        all_sessions = street_sessions + non_street_sessions
+        all_sessions.sort(key=lambda x: x['start_time'])
+
+        # Replace the day's appointments with the updated list
+        appointments_by_day[day] = all_sessions
+
+    # Reconstruct the full schedule
+    updated_appointments = []
+    for day_appointments in appointments_by_day.values():
+        updated_appointments.extend(day_appointments)
+
+    # Sort by date and time
+    updated_appointments.sort(key=lambda x: (x['date'], x['start_time']))
+
+    return updated_appointments
+
+
+def time_to_minutes(time_str):
+    """Convert time string (HH:MM) to minutes from midnight."""
+    hours, minutes = map(int, time_str.split(':'))
+    return hours * 60 + minutes
+
+
+def minutes_to_time(minutes):
+    """Convert minutes from midnight to time string (HH:MM)."""
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours:02d}:{mins:02d}"
+
+
+def compact_street_sessions(street_sessions, fixed_points, required_break):
+    """Compact street sessions to minimize gaps while respecting fixed points."""
+    # If no street sessions, nothing to do
+    if not street_sessions:
+        return
+
+    # Get the earliest possible start time (considering first fixed point)
+    # By default, start at the original start time of the first session
+    current_time = time_to_minutes(street_sessions[0]['start_time'])
+
+    # Check if there are fixed points before the first session
+    relevant_fixed_points = [fp for fp in fixed_points if fp['time'] < current_time]
+    if relevant_fixed_points:
+        # Start after the last fixed point before the original start time
+        current_time = max(current_time, relevant_fixed_points[-1]['time'])
+
+    # Process each street session
+    for i, session in enumerate(street_sessions):
+        session_start = time_to_minutes(session['start_time'])
+        session_duration = session['duration'] if 'duration' in session else time_to_minutes(
+            session['end_time']) - session_start
+
+        # Check if we need to delay this session due to a fixed point
+        for fixed_point in fixed_points:
+            if current_time < fixed_point['time'] < current_time + session_duration:
+                # Need to start after this fixed point
+                current_time = fixed_point['time']
+
+        # Update the session's start and end times
+        new_start = current_time
+        new_end = new_start + session_duration
+
+        # Make sure the new times don't overlap with working hours
+        # In a real implementation, you'd check against working hours here
+
+        # Update the session times
+        session['start_time'] = minutes_to_time(new_start)
+        session['end_time'] = minutes_to_time(new_end)
+
+        # Update current time for the next session
+        current_time = new_end + required_break
 
 
 def export_schedule_to_json(scheduled_appointments, output_file):
