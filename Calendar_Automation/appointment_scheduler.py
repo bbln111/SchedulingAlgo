@@ -377,34 +377,67 @@ def schedule_appointments(json_file, max_street_gap=30):
             # Enforce the rule: either 0 or at least 2 streets sessions per day
             model.Add(street_sessions_per_day[day] == 0).OnlyEnforceIf(days_with_streets[day].Not())
 
-            # Add constraints to ensure all street sessions on the same day have at most max_street_gap minute gaps
             if len(street_sessions_by_day[day]) >= 2:
-                for i, (client1_id, client1_duration, is_scheduled1) in enumerate(street_sessions_by_day[day]):
-                    for j, (client2_id, client2_duration, is_scheduled2) in enumerate(street_sessions_by_day[day]):
-                        if i < j:  # Avoid duplicate pairs
-                            # Both sessions are scheduled on this day
-                            both_scheduled_this_day = model.NewBoolVar(f'both_{client1_id}_{client2_id}_on_day_{day}')
-                            model.AddBoolAnd([is_scheduled1, is_scheduled2]).OnlyEnforceIf(both_scheduled_this_day)
+                # Create a variable for each session to represent its position in the sequence
+                session_positions = {}
+                for i, (client_id, _, is_scheduled) in enumerate(street_sessions_by_day[day]):
+                    # For each potential session, create a variable for its position (0 = not scheduled)
+                    max_position = len(street_sessions_by_day[day])
+                    session_positions[client_id] = model.NewIntVar(0, max_position, f'position_{client_id}_day_{day}')
+
+                    # If the session is not scheduled, its position is 0
+                    model.Add(session_positions[client_id] == 0).OnlyEnforceIf(is_scheduled.Not())
+                    # If the session is scheduled, its position is > 0
+                    model.Add(session_positions[client_id] > 0).OnlyEnforceIf(is_scheduled)
+
+                # Ensure positions are different for scheduled sessions
+                for i, (client1_id, _, is_scheduled1) in enumerate(street_sessions_by_day[day]):
+                    for j, (client2_id, _, is_scheduled2) in enumerate(street_sessions_by_day[day]):
+                        if i < j:
+                            both_scheduled = model.NewBoolVar(f'both_{client1_id}_{client2_id}_on_day_{day}_scheduled')
+                            model.AddBoolAnd([is_scheduled1, is_scheduled2]).OnlyEnforceIf(both_scheduled)
                             model.AddBoolOr([is_scheduled1.Not(), is_scheduled2.Not()]).OnlyEnforceIf(
-                                both_scheduled_this_day.Not())
+                                both_scheduled.Not())
 
-                            # If both are scheduled on this day, enforce max gap constraint
-                            # First determine which session comes first
-                            client1_before_client2 = model.NewBoolVar(f'{client1_id}_before_{client2_id}_on_day_{day}')
-                            model.Add(appointment_vars[client1_id] < appointment_vars[client2_id]).OnlyEnforceIf(
-                                client1_before_client2)
-                            model.Add(appointment_vars[client1_id] >= appointment_vars[client2_id]).OnlyEnforceIf(
-                                client1_before_client2.Not())
+                            # If both are scheduled, they must have different positions
+                            model.Add(session_positions[client1_id] != session_positions[client2_id]).OnlyEnforceIf(
+                                both_scheduled)
 
-                            # Enforce max gap constraint
-                            model.Add(appointment_vars[client2_id] - (
+                # Now, for each session, if it's in position p, find the session in position p+1
+                # and enforce the max_street_gap constraint between them
+                for position in range(1, len(street_sessions_by_day[day])):
+                    # For each client that might be at position 'position'
+                    for i, (client1_id, client1_duration, is_scheduled1) in enumerate(street_sessions_by_day[day]):
+                        client1_at_position = model.NewBoolVar(f'client_{client1_id}_at_position_{position}_day_{day}')
+                        model.Add(session_positions[client1_id] == position).OnlyEnforceIf(client1_at_position)
+                        model.Add(session_positions[client1_id] != position).OnlyEnforceIf(client1_at_position.Not())
+
+                        # For each client that might be at position 'position+1'
+                        for j, (client2_id, client2_duration, is_scheduled2) in enumerate(street_sessions_by_day[day]):
+                            if i != j:
+                                client2_at_next_position = model.NewBoolVar(
+                                    f'client_{client2_id}_at_position_{position + 1}_day_{day}')
+                                model.Add(session_positions[client2_id] == position + 1).OnlyEnforceIf(
+                                    client2_at_next_position)
+                                model.Add(session_positions[client2_id] != position + 1).OnlyEnforceIf(
+                                    client2_at_next_position.Not())
+
+                                # If client1 is at position and client2 is at next position, enforce gap constraint
+                                consecutive = model.NewBoolVar(f'consecutive_{client1_id}_{client2_id}_day_{day}')
+                                model.AddBoolAnd([client1_at_position, client2_at_next_position]).OnlyEnforceIf(
+                                    consecutive)
+                                model.AddBoolOr(
+                                    [client1_at_position.Not(), client2_at_next_position.Not()]).OnlyEnforceIf(
+                                    consecutive.Not())
+
+                                # When consecutive, client2 must come after client1
+                                model.Add(appointment_vars[client2_id] > appointment_vars[client1_id]).OnlyEnforceIf(
+                                    consecutive)
+
+                                # Enforce max gap constraint only between consecutive sessions
+                                model.Add(appointment_vars[client2_id] - (
                                         appointment_vars[client1_id] + client1_duration) <= max_street_gap) \
-                                .OnlyEnforceIf([both_scheduled_this_day, client1_before_client2])
-
-                            # If client2 is before client1
-                            model.Add(appointment_vars[client1_id] - (
-                                        appointment_vars[client2_id] + client2_duration) <= max_street_gap) \
-                                .OnlyEnforceIf([both_scheduled_this_day, client1_before_client2.Not()])
+                                    .OnlyEnforceIf(consecutive)
 
     # Add constraints to prevent scheduling appointments at the same time (no overlaps)
     for i, client1 in enumerate(client_availabilities):
