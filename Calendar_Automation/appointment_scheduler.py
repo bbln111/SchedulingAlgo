@@ -880,17 +880,398 @@ def export_enhanced_schedule_to_json(scheduled_appointments, client_availabiliti
     print(f"Enhanced schedule exported to {output_file}")
 
 
+def export_schedule_to_html(scheduled_appointments, client_availabilities, output_file, start_date):
+    """Export the scheduled appointments to an HTML file with a neat design.
+
+    Args:
+        scheduled_appointments: List of scheduled appointment dictionaries
+        client_availabilities: List of client availability dictionaries
+        output_file: Path to the output HTML file
+        start_date: The start date of the scheduling period (datetime object)
+    """
+    # Get set of scheduled client IDs
+    scheduled_client_ids = set(appt['client_id'] for appt in scheduled_appointments)
+
+    # Get all client IDs
+    all_client_ids = set(client['id'] for client in client_availabilities)
+
+    # Get unscheduled client IDs
+    unscheduled_client_ids = all_client_ids - scheduled_client_ids
+
+    # Group appointments by day
+    appointments_by_day = {}
+    for appt in scheduled_appointments:
+        day = appt['date']
+        if day not in appointments_by_day:
+            appointments_by_day[day] = []
+        appointments_by_day[day].append(appt)
+
+    # Get unscheduled clients info
+    unscheduled_clients = []
+    for client_id in unscheduled_client_ids:
+        client_data = next((c for c in client_availabilities if c['id'] == client_id), None)
+        if client_data:
+            session_type = client_data['type']
+            priority_value = client_data['priority']
+
+            # Convert priority value back to name
+            priority_value_to_name = {3: "High", 2: "Medium", 1: "Low"}
+            priority_name = priority_value_to_name.get(priority_value, str(priority_value))
+
+            unscheduled_clients.append({
+                'id': client_id,
+                'type': session_type,
+                'priority': priority_name
+            })
+
+    # Count sessions by type
+    session_types = ['streets', 'trial_streets', 'zoom', 'trial_zoom', 'field']
+    type_counts = {
+        session_type: {
+            'scheduled': 0,
+            'total': 0,
+            'rate': 0.0
+        } for session_type in session_types
+    }
+
+    # Count total for each type
+    for client in client_availabilities:
+        session_type = client['type']
+        if session_type in type_counts:
+            type_counts[session_type]['total'] += 1
+
+    # Count scheduled for each type
+    for appt in scheduled_appointments:
+        session_type = appt['type']
+        if session_type in type_counts:
+            type_counts[session_type]['scheduled'] += 1
+
+    # Calculate rates
+    for session_type in type_counts:
+        total = type_counts[session_type]['total']
+        if total > 0:
+            scheduled = type_counts[session_type]['scheduled']
+            type_counts[session_type]['rate'] = round(scheduled / total * 100)  # Percentage
+
+    # Create the HTML content
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Schedule Report</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+            h1, h2, h3 {{
+                color: #2c3e50;
+            }}
+            .header {{
+                border-bottom: 2px solid #3498db;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+            }}
+            .summary {{
+                background-color: #f8f9fa;
+                border-radius: 5px;
+                padding: 15px;
+                margin-bottom: 20px;
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+            }}
+            .summary-box {{
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 10px;
+                margin: 5px;
+                flex: 1;
+                min-width: 200px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }}
+            .day-schedule {{
+                margin-bottom: 30px;
+            }}
+            .day-header {{
+                background-color: #3498db;
+                color: white;
+                padding: 10px;
+                border-radius: 5px 5px 0 0;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }}
+            th, td {{
+                padding: 12px 15px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+            }}
+            th {{
+                background-color: #f2f2f2;
+            }}
+            tr:hover {{
+                background-color: #f5f5f5;
+            }}
+            .streets {{
+                background-color: #d4edda;
+            }}
+            .trial_streets {{
+                background-color: #c3e6cb;
+            }}
+            .zoom {{
+                background-color: #d1ecf1;
+            }}
+            .trial_zoom {{
+                background-color: #bee5eb;
+            }}
+            .unscheduled {{
+                background-color: #f8d7da;
+                margin-top: 30px;
+                border-radius: 5px;
+                padding: 15px;
+            }}
+            .progress {{
+                height: 20px;
+                width: 100%;
+                background-color: #e9ecef;
+                border-radius: 20px;
+                position: relative;
+                margin-top: 5px;
+            }}
+            .progress-bar {{
+                height: 100%;
+                border-radius: 20px;
+                background-color: #3498db;
+                text-align: center;
+                color: white;
+                line-height: 20px;
+                font-size: 12px;
+            }}
+            .good {{
+                background-color: #28a745;
+            }}
+            .medium {{
+                background-color: #ffc107;
+            }}
+            .poor {{
+                background-color: #dc3545;
+            }}
+            .badge {{
+                display: inline-block;
+                padding: 3px 7px;
+                font-size: 12px;
+                font-weight: bold;
+                line-height: 1;
+                text-align: center;
+                white-space: nowrap;
+                vertical-align: baseline;
+                border-radius: 10px;
+                color: white;
+            }}
+            .badge-streets {{
+                background-color: #28a745;
+            }}
+            .badge-trial_streets {{
+                background-color: #20c997;
+            }}
+            .badge-zoom {{
+                background-color: #17a2b8;
+            }}
+            .badge-trial_zoom {{
+                background-color: #0dcaf0;
+            }}
+            .empty-message {{
+                text-align: center;
+                padding: 20px;
+                color: #6c757d;
+            }}
+            footer {{
+                margin-top: 50px;
+                padding-top: 20px;
+                border-top: 1px solid #ddd;
+                text-align: center;
+                font-size: 14px;
+                color: #6c757d;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Appointment Schedule Report</h1>
+            <p>Scheduling period starting: {start_date.strftime('%Y-%m-%d')}</p>
+            <p>Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+        </div>
+
+        <div class="summary">
+            <div class="summary-box">
+                <h3>Schedule Overview</h3>
+                <p>Total appointments: {len(client_availabilities)}</p>
+                <p>Scheduled: {len(scheduled_appointments)} ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
+                <p>Unscheduled: {len(unscheduled_clients)}</p>
+            </div>
+    """
+
+    # Add session type statistics
+    for session_type in ['streets', 'trial_streets', 'zoom', 'trial_zoom']:
+        if type_counts[session_type]['total'] > 0:
+            scheduled = type_counts[session_type]['scheduled']
+            total = type_counts[session_type]['total']
+            rate = type_counts[session_type]['rate']
+
+            # Determine color class based on rate
+            color_class = "good" if rate >= 75 else "medium" if rate >= 50 else "poor"
+
+            # Format the session type for display
+            display_type = " ".join(word.capitalize() for word in session_type.split("_"))
+
+            html_content += f"""
+            <div class="summary-box">
+                <h3>{display_type}</h3>
+                <p>Scheduled: {scheduled} / {total}</p>
+                <div class="progress">
+                    <div class="progress-bar {color_class}" style="width: {rate}%">{rate}%</div>
+                </div>
+            </div>
+            """
+
+    html_content += """
+        </div>
+    """
+
+    # Daily schedule
+    if appointments_by_day:
+        html_content += """
+        <h2>Daily Schedule</h2>
+        """
+
+        # Sort days
+        for day, appointments in sorted(appointments_by_day.items()):
+            day_name = appointments[0]['day']
+            html_content += f"""
+            <div class="day-schedule">
+                <div class="day-header">
+                    <h3>{day_name} ({day})</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Client ID</th>
+                            <th>Session Type</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+
+            # Sort appointments by start time
+            for appt in sorted(appointments, key=lambda x: x['start_time']):
+                session_type = appt['type']
+                html_content += f"""
+                        <tr class="{session_type}">
+                            <td>{appt['start_time']}</td>
+                            <td>{appt['end_time']}</td>
+                            <td>{appt['client_id']}</td>
+                            <td><span class="badge badge-{session_type}">{session_type}</span></td>
+                            <td>{appt['duration']} min</td>
+                        </tr>
+                """
+
+            html_content += """
+                    </tbody>
+                </table>
+            </div>
+            """
+    else:
+        html_content += """
+        <div class="empty-message">
+            <h2>No appointments scheduled</h2>
+            <p>The scheduler was unable to find a valid solution for the given constraints.</p>
+        </div>
+        """
+
+    # Unscheduled clients
+    if unscheduled_clients:
+        html_content += """
+        <div class="unscheduled">
+            <h2>Unscheduled Appointments</h2>
+            <p>The following appointments could not be scheduled:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Client ID</th>
+                        <th>Session Type</th>
+                        <th>Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+
+        for client in sorted(unscheduled_clients, key=lambda x: x['id']):
+            html_content += f"""
+                    <tr>
+                        <td>{client['id']}</td>
+                        <td><span class="badge badge-{client['type']}">{client['type']}</span></td>
+                        <td>{client['priority']}</td>
+                    </tr>
+            """
+
+        html_content += """
+                </tbody>
+            </table>
+        </div>
+        """
+
+    # Footer
+    html_content += """
+        <footer>
+            <p>Generated by Appointment Scheduler</p>
+        </footer>
+    </body>
+    </html>
+    """
+
+    # Write to file
+    with open(output_file, 'w') as f:
+        f.write(html_content)
+
+    print(f"HTML schedule report exported to {output_file}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Schedule appointments based on constraints and client availability.')
     parser.add_argument('input_file', type=str, help='Path to the input JSON file')
     parser.add_argument('--output', type=str, default='schedule.json', help='Path to the output JSON file')
+    parser.add_argument('--html', type=str, default='schedule_report.html', help='Path to the output HTML report file')
     parser.add_argument('--max-street-gap', type=int, default=30,
                         help='Maximum gap in minutes allowed between consecutive street sessions (default: 30)')
 
     args = parser.parse_args()
 
+    # Get the start date from the input file
+    with open(args.input_file, 'r') as f:
+        data = json.load(f)
+    start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
+
+    # Schedule the appointments
     appointments, client_availabilities = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
 
-    # Always export, even if no appointments were scheduled
-    # This will create a JSON with empty filled_appointments but complete type_balance
+    # Export to both JSON and HTML
     export_enhanced_schedule_to_json(appointments, client_availabilities, args.output)
+    export_schedule_to_html(appointments, client_availabilities, args.html, start_date)
+
+    # Print a message with links to both files
+    print(f"\nExports completed:")
+    print(f"- JSON: {args.output}")
+    print(f"- HTML Report: {args.html}")
