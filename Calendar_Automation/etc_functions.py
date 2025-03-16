@@ -1,5 +1,6 @@
 import datetime
 
+
 def _is_faulty_client(dates):
     counter = {}
     for date in dates:
@@ -11,12 +12,13 @@ def _is_faulty_client(dates):
             return False
     return True
 
+
 def should_rerun(big_dict):
-    filled_appointments = big_dict['filled_appointments']
+    filled_appointments = big_dict.get('filled_appointments', [])
     clients = {}
     for appointment in filled_appointments:
-        id = appointment['id']
-        start = appointment['start_time']
+        id = appointment.get('id', '')
+        start = appointment.get('start_time', '')
         real_id = None
         if '-' in id:
             real_id = id.split('-')[0]
@@ -34,14 +36,27 @@ def should_rerun(big_dict):
 
     return False
 
-def unite_output_from_script(appointments):
-    for appointment in appointments:
-        id = appointment['id']
-        real_id = None
-        if '-' in id:
-            real_id = id.split('-')[0]
-        else:
-            real_id = id
-        appointment['id'] = real_id
 
-    return appointments
+def unite_output_from_script(output_dict):
+    """
+    Fix appointment IDs in the output dictionary
+    """
+    result = output_dict.copy()  # Create a copy to avoid modifying the original
+
+    # Process filled appointments
+    filled_appointments = result.get('filled_appointments', [])
+    for appointment in filled_appointments:
+        appointment_id = appointment.get('id', '')
+        if '-' in appointment_id:
+            real_id = appointment_id.split('-')[0]
+            appointment['id'] = real_id
+
+    # Also process unfilled appointments
+    unfilled_appointments = result.get('unfilled_appointments', [])
+    for appointment in unfilled_appointments:
+        appointment_id = appointment.get('id', '')
+        if '-' in appointment_id:
+            real_id = appointment_id.split('-')[0]
+            appointment['id'] = real_id
+
+    return result

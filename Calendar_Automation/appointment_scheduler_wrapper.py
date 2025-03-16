@@ -1,72 +1,83 @@
+"""
+Wrapper for appointment_scheduler.py that makes it a drop-in replacement for the scheduling logic in calculate.py.
+This provides compatibility with the Flask API endpoints in calculate.py.
+"""
+
 import logging
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+from flask import Flask, request, jsonify
 
-# Import the new scheduler instead of the old one
 from appointment_scheduler import schedule_appointments as ortools_scheduler
 
 logger = logging.getLogger(__name__)
 
+# Flask Application (same name as in calculate.py to ensure compatibility)
+flask_app = Flask(__name__)
 
-def run_on_file(input_file_path):
+
+@flask_app.route('/schedule', methods=['POST'])
+def schedule_endpoint():
     """
-    Run scheduling algorithm on the input file.
-    Adapts between the old calculate.py interface and the new appointment_scheduler.py
-
-    Args:
-        input_file_path (str): Path to the input JSON file
-
-    Returns:
-        dict: Scheduling results formatted to match the expected output structure
+    API endpoint to handle scheduling requests.
+    Preserves the same interface as calculate.py but uses the new scheduler.
     """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid or empty JSON payload."}), 400
+
     try:
-        logger.info(f"Starting scheduling on file: {input_file_path}")
+        # Save the input data to a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp:
+            json.dump(data, tmp)
+            temp_file_path = tmp.name
 
-        # Ensure file exists
-        input_path = Path(input_file_path)
-        if not input_path.exists():
-            logger.error(f"Input file not found: {input_file_path}")
-            return {
-                "filled_appointments": [],
-                "unfilled_appointments": [],
-                "validation": {
-                    "valid": False,
-                    "issues": [f"Input file not found: {input_file_path}"]
-                }
-            }
+        logger.info(f"Saved input data to temporary file: {temp_file_path}")
 
-        # Run the appointment scheduler (OR-Tools version)
-        appointments = ortools_scheduler(input_file_path, max_street_gap=30)
+        # Run the scheduler on the temporary file
+        appointments = ortools_scheduler(temp_file_path, max_street_gap=30)
 
-        # Convert scheduler output format to the format expected by the existing system
-        result = convert_scheduler_output(appointments, input_file_path)
+        # Convert the output to the expected format
+        output = convert_scheduler_output(appointments, data)
 
-        logger.info(f"Scheduling completed with {len(result['filled_appointments'])} filled appointments")
-        return result
+        # Clean up the temporary file
+        import os
+        try:
+            os.unlink(temp_file_path)
+        except Exception as e:
+            logger.warning(f"Could not delete temporary file {temp_file_path}: {e}")
+
+        return jsonify(output), 200
 
     except Exception as e:
-        logger.exception(f"Error in run_on_file: {str(e)}")
-        return {
+        logger.error(f"Error processing schedule request: {e}", exc_info=True)
+        return jsonify({
+            "error": f"Error processing schedule request: {str(e)}",
             "filled_appointments": [],
             "unfilled_appointments": [],
             "validation": {
                 "valid": False,
-                "issues": [f"Scheduling error: {str(e)}"]
+                "issues": [f"Processing error: {str(e)}"]
             }
-        }
+        }), 500
 
 
-def convert_scheduler_output(scheduled_appointments, input_file_path):
+@flask_app.route('/', methods=['GET'])
+def health_check():
+    """Simple health check endpoint."""
+    return jsonify({"status": "Scheduler is running (OR-Tools version)"}), 200
+
+
+def convert_scheduler_output(scheduled_appointments, input_data):
     """
-    Convert appointment_scheduler.py output format to the format expected by the existing system
+    Convert the output of the OR-Tools scheduler to the format expected by the system.
 
     Args:
-        scheduled_appointments (list): List of appointments scheduled by appointment_scheduler.py
-        input_file_path (str): Path to the input file for retrieving unscheduled appointments
+        scheduled_appointments: List of scheduled appointments from OR-Tools scheduler
+        input_data: Original input data
 
     Returns:
-        dict: Output in the format expected by the existing system
+        dict: Output in the format expected by the system
     """
     filled_appointments = []
     unfilled_appointments = []
@@ -82,6 +93,7 @@ def convert_scheduler_output(scheduled_appointments, input_file_path):
         start_time_str = appointment['start_time']
         end_time_str = appointment['end_time']
 
+        from datetime import datetime
         start_datetime = datetime.strptime(f"{date_str} {start_time_str}", "%Y-%m-%d %H:%M")
         end_datetime = datetime.strptime(f"{date_str} {end_time_str}", "%Y-%m-%d %H:%M")
 
@@ -94,9 +106,6 @@ def convert_scheduler_output(scheduled_appointments, input_file_path):
 
     # Find unscheduled appointments
     try:
-        with open(input_file_path, 'r') as f:
-            input_data = json.load(f)
-
         all_appointments = input_data.get('appointments', [])
         scheduled_ids = {appointment['client_id'] for appointment in scheduled_appointments}
 
@@ -142,3 +151,9 @@ def convert_scheduler_output(scheduled_appointments, input_file_path):
     }
 
     return result
+
+
+# If running directly, start the Flask app
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    flask_app.run(host='0.0.0.0', port=5000, debug=True)
