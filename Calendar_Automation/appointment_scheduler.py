@@ -57,11 +57,27 @@ def day_number_to_name(day_number):
 def get_working_hours(day_number):
     """Return working hours for the given day as (start_minute, end_minute)."""
     if 0 <= day_number <= 4:  # Sunday to Thursday
-        return (10 * 60, 23 * 60)  # 10:00 to 23:00
+        return 10 * 60, 23 * 60  # 10:00 to 23:00
     elif day_number == 5:  # Friday
-        return (12 * 60 + 30, 17 * 60)  # 12:30 to 17:00
+        return 12 * 60 + 30, 17 * 60  # 12:30 to 17:00
     else:  # Saturday
         return None  # No working hours on Saturday
+
+
+def python_weekday_to_our_weekday(python_weekday):
+    """
+    Convert Python's weekday (0=Monday, 1=Tuesday, ..., 6=Sunday)
+    to our weekday system (0=Sunday, 1=Monday, ..., 6=Saturday)
+    """
+    return (python_weekday + 1) % 7
+
+
+def our_weekday_to_python_weekday(our_weekday):
+    """
+    Convert our weekday system (0=Sunday, 1=Monday, ..., 6=Saturday)
+    to Python's weekday (0=Monday, 1=Tuesday, ..., 6=Sunday)
+    """
+    return (our_weekday - 1) % 7
 
 
 def schedule_appointments(json_file, max_street_gap=30):
@@ -72,15 +88,16 @@ def schedule_appointments(json_file, max_street_gap=30):
         max_street_gap (int): Maximum gap in minutes allowed between consecutive street sessions
     """
     # Load data from JSON file
-    with open(json_file, 'r') as f:
-        data = json.load(f)
+    with open(json_file, 'r') as constraints_file:
+        json_data = json.load(constraints_file)
 
-    start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
-    clients = data['appointments']
+    constraint_start_date = datetime.strptime(json_data['start_date'], '%Y-%m-%d')
+    clients = json_data['appointments']
 
     # Print summary of input data
     print(f"\n=== Input Data Summary ===")
-    print(f"Start date: {start_date.strftime('%Y-%m-%d')} ({day_number_to_name(start_date.weekday())})")
+    print(f"Start date: {constraint_start_date.strftime('%Y-%m-%d')} "
+          f"({day_number_to_name(constraint_start_date.weekday())})")
     print(f"Total clients: {len(clients)}")
     print(f"Maximum gap between street sessions: {max_street_gap} minutes")
 
@@ -193,7 +210,9 @@ def schedule_appointments(json_file, max_street_gap=30):
         for availability in client.get('days', []):
             day_name = availability['day']
             day_number = day_name_to_number(day_name)
-            day_offset = (day_number - start_date.weekday() + 7) % 7
+            python_weekday = constraint_start_date.weekday()  # 0-6 (Monday-Sunday)
+            our_start_weekday = python_weekday_to_our_weekday(python_weekday)  # 0-6 (Sunday-Saturday)
+            day_offset = (day_number - our_start_weekday + 7) % 7
 
             # Skip Saturdays as they are not working days
             if day_number == 6:
@@ -301,7 +320,6 @@ def schedule_appointments(json_file, max_street_gap=30):
 
     for client in client_availabilities:
         client_id = client['id']
-        session_type = client['type']
 
         # Create a variable for the start time of the appointment
         appointment_vars[client_id] = model.NewIntVar(0, horizon_minutes, f'start_{client_id}')
@@ -439,6 +457,66 @@ def schedule_appointments(json_file, max_street_gap=30):
                                         appointment_vars[client1_id] + client1_duration) <= max_street_gap) \
                                     .OnlyEnforceIf(consecutive)
 
+    # For each day, add constraints to ensure all street sessions are scheduled before or after all zoom sessions
+    # (not interleaved) and have the required gap between them
+    for day in range(7):
+        # Skip Saturday
+        if day == 6:
+            continue
+
+        # Create variables to track if clients are scheduled on this day
+        day_clients = {}
+        for client in client_availabilities:
+            client_id = client['id']
+            is_scheduled_on_day = model.NewBoolVar(f'client_{client_id}_on_day_{day}')
+            model.Add(appointment_day_vars[client_id] == day).OnlyEnforceIf(is_scheduled_on_day)
+            model.Add(appointment_day_vars[client_id] != day).OnlyEnforceIf(is_scheduled_on_day.Not())
+            model.AddImplication(is_scheduled_on_day, appointment_scheduled_vars[client_id])
+            day_clients[client_id] = is_scheduled_on_day
+
+        # Get all street and zoom clients for this day
+        streets_on_day = [(client['id'], client['type']) for client in client_availabilities
+                          if client['type'] in ['streets', 'trial_streets']]
+        zooms_on_day = [(client['id'], client['type']) for client in client_availabilities
+                        if client['type'] in ['zoom', 'trial_zoom']]
+
+        # If there are both street and zoom sessions on this day, enforce consecutive scheduling
+        if streets_on_day and zooms_on_day:
+            # Create a variable to represent whether all street sessions come before zoom sessions on this day
+            streets_before_zooms = model.NewBoolVar(f'streets_before_zooms_day_{day}')
+            streets_after_zooms = model.NewBoolVar(f'streets_after_zooms_day_{day}')
+
+            # Either all streets come before all zooms, or all streets come after all zooms
+            model.AddBoolOr([streets_before_zooms, streets_after_zooms])
+
+            # For each street and zoom pair, enforce the appropriate ordering
+            for street_id, _ in streets_on_day:
+                for zoom_id, _ in zooms_on_day:
+                    # Only if both are scheduled on this day
+                    both_on_day = model.NewBoolVar(f'both_{street_id}_{zoom_id}_on_day_{day}')
+                    model.AddBoolAnd([day_clients[street_id], day_clients[zoom_id]]).OnlyEnforceIf(both_on_day)
+                    model.AddBoolOr([day_clients[street_id].Not(), day_clients[zoom_id].Not()]).OnlyEnforceIf(
+                        both_on_day.Not())
+
+                    # If streets before zooms, this street must be before this zoom
+                    street_before_zoom = model.NewBoolVar(f'{street_id}_before_{zoom_id}')
+                    model.Add(appointment_vars[street_id] +
+                              client_availabilities[next(i for i, c in enumerate(client_availabilities)
+                                                         if c['id'] == street_id)]['duration'] + 75 <=
+                              appointment_vars[zoom_id]).OnlyEnforceIf(
+                        [both_on_day, streets_before_zooms, street_before_zoom])
+
+                    # If streets after zooms, this street must be after this zoom
+                    zoom_before_street = model.NewBoolVar(f'{zoom_id}_before_{street_id}')
+                    model.Add(appointment_vars[zoom_id] +
+                              client_availabilities[next(i for i, c in enumerate(client_availabilities)
+                                                         if c['id'] == zoom_id)]['duration'] + 75 <=
+                              appointment_vars[street_id]).OnlyEnforceIf(
+                        [both_on_day, streets_after_zooms, zoom_before_street])
+
+                    # Ensure exactly one ordering if both are scheduled on this day
+                    model.AddBoolOr([street_before_zoom, zoom_before_street]).OnlyEnforceIf(both_on_day)
+
     # Add constraints to prevent scheduling appointments at the same time (no overlaps)
     for i, client1 in enumerate(client_availabilities):
         client1_id = client1['id']
@@ -473,10 +551,12 @@ def schedule_appointments(json_file, max_street_gap=30):
                              appointment_scheduled_vars[client2_id].Not()]).OnlyEnforceIf(both_scheduled.Not())
 
             # If both are scheduled, ensure they don't overlap
-            model.Add(appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]) \
-                .OnlyEnforceIf([both_scheduled, client1_before_client2])
-            model.Add(appointment_vars[client2_id] + client2_duration + required_break <= appointment_vars[client1_id]) \
-                .OnlyEnforceIf([both_scheduled, client2_before_client1])
+            model.Add(
+                appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]
+            ).OnlyEnforceIf([both_scheduled, client1_before_client2])
+            model.Add(
+                appointment_vars[client2_id] + client2_duration + required_break <= appointment_vars[client1_id]
+            ).OnlyEnforceIf([both_scheduled, client2_before_client1])
 
             # Ensure that exactly one of the non-overlap constraints is true if both are scheduled
             model.AddBoolOr([client1_before_client2, client2_before_client1]).OnlyEnforceIf(both_scheduled)
@@ -531,7 +611,7 @@ def schedule_appointments(json_file, max_street_gap=30):
                 day_number = solver.Value(appointment_day_vars[client_id])
 
                 # Calculate the date and time
-                appointment_date = start_date + timedelta(days=(day_number - start_date.weekday() + 7) % 7)
+                appointment_date = constraint_start_date + timedelta(days=(day_number - our_start_weekday + 7) % 7)
                 start_hour = (start_time_minutes % (24 * 60)) // 60
                 start_minute = (start_time_minutes % (24 * 60)) % 60
 
@@ -592,16 +672,18 @@ def schedule_appointments(json_file, max_street_gap=30):
                             appt_day = day_name_to_number(appt['day'])
 
                             if appt_day in client_days:
-                                if client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in ['streets',
-                                                                                                            'trial_streets']:
+                                if (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in
+                                        ['streets', 'trial_streets']):
+                                    conflicts.append(f"Potential street session conflict with Client "
+                                                     f"{appt['client_id']} ({appt['day']} {appt['start_time']})")
+                                elif (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in
+                                      ['zoom', 'trial_zoom']) or \
+                                        (client_data['type'] in ['zoom', 'trial_zoom'] and appt['type'] in
+                                         ['streets', 'trial_streets']):
                                     conflicts.append(
-                                        f"Potential street session conflict with Client {appt['client_id']} ({appt['day']} {appt['start_time']})")
-                                elif (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in ['zoom',
-                                                                                                               'trial_zoom']) or \
-                                        (client_data['type'] in ['zoom', 'trial_zoom'] and appt['type'] in ['streets',
-                                                                                                            'trial_streets']):
-                                    conflicts.append(
-                                        f"Potential streets-zoom transition with Client {appt['client_id']} ({appt['day']} {appt['start_time']})")
+                                        f"Potential streets-zoom transition with Client {appt['client_id']} "
+                                        f"({appt['day']} {appt['start_time']})"
+                                    )
 
                         if conflicts:
                             print(f"    Possible conflicts:")
@@ -637,6 +719,73 @@ def schedule_appointments(json_file, max_street_gap=30):
         return [], client_availabilities
 
 
+def enforce_street_zoom_gaps(appointments, streets_zoom_break=75):
+    """Enforces the 75-minute gap constraint between street and zoom sessions.
+
+    Args:
+        appointments: List of appointments for a single day, sorted by start time
+        streets_zoom_break: Minimum break required between street and zoom sessions
+
+    Returns:
+        Updated list of appointments with correct gaps
+    """
+    if len(appointments) <= 1:
+        return appointments
+
+    # Create a copy to avoid modifying the original
+    appointments = [appointment.copy() for appointment in appointments]
+
+    # Sort by start time to ensure proper order
+    appointments.sort(key=lambda x: x['start_time'])
+
+    # Check for violations of the constraint (street followed by zoom with gap < 75 minutes)
+    for i in range(len(appointments) - 1):
+        current = appointments[i]
+        next_appt = appointments[i + 1]
+
+        # Check if this is a street-to-zoom transition
+        if current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']:
+            current_end_minutes = time_to_minutes(current['end_time'])
+            next_start_minutes = time_to_minutes(next_appt['start_time'])
+
+            # Calculate the gap
+            gap = next_start_minutes - current_end_minutes
+
+            # If gap is less than required, adjust the next appointment
+            if gap < streets_zoom_break:
+                # Move the zoom session to start 75 minutes after the street session ends
+                new_start_minutes = current_end_minutes + streets_zoom_break
+                new_end_minutes = new_start_minutes + next_appt['duration']
+
+                next_appt['start_time'] = minutes_to_time(new_start_minutes)
+                next_appt['end_time'] = minutes_to_time(new_end_minutes)
+
+                # Now we need to check and fix any overlaps created by this adjustment
+                for j in range(i + 1, len(appointments) - 1):
+                    current_j = appointments[j]
+                    next_j = appointments[j + 1]
+
+                    current_j_end = time_to_minutes(current_j['end_time'])
+                    next_j_start = time_to_minutes(next_j['start_time'])
+
+                    required_gap = streets_zoom_break if (current_j['type'] in ['streets', 'trial_streets'] and
+                                                          next_j['type'] in ['zoom', 'trial_zoom']) else required_break
+
+                    # If there's an overlap or insufficient gap
+                    if next_j_start < current_j_end + required_gap:
+                        # Adjust the next appointment
+                        new_next_start = current_j_end + required_gap
+                        new_next_end = new_next_start + next_j['duration']
+
+                        next_j['start_time'] = minutes_to_time(new_next_start)
+                        next_j['end_time'] = minutes_to_time(new_next_end)
+
+    # Re-sort by start time in case any adjustments changed the order
+    appointments.sort(key=lambda x: x['start_time'])
+
+    return appointments
+
+
 def minimize_gaps_post_processing(scheduled_appointments, required_break=15, streets_zoom_break=75):
     """Post-processes the schedule to minimize gaps between street sessions while maintaining constraints.
 
@@ -661,48 +810,54 @@ def minimize_gaps_post_processing(scheduled_appointments, required_break=15, str
         # Sort by start time
         appointments.sort(key=lambda x: x['start_time'])
 
-        # Identify street and non-street sessions
+        # First, verify and fix gaps between street-to-zoom transitions
+        # This needs to be done before compacting street sessions to ensure the 75-minute gap is maintained
+        appointments = enforce_street_zoom_gaps(appointments, required_break, streets_zoom_break)
+
+        # After fixing gaps, identify street and non-street sessions
         street_sessions = [appt for appt in appointments if appt['type'] in ['streets', 'trial_streets']]
         non_street_sessions = [appt for appt in appointments if appt['type'] not in ['streets', 'trial_streets']]
 
-        # Only process days with at least 2 street sessions
-        if len(street_sessions) < 2:
-            continue
+        # Only proceed with compacting if there are at least 2 street sessions
+        if len(street_sessions) >= 2:
+            # Sort street sessions by start time
+            street_sessions.sort(key=lambda x: x['start_time'])
 
-        # Sort street sessions by start time
-        street_sessions.sort(key=lambda x: x['start_time'])
+            # Create a timeline of fixed points from non-street sessions
+            fixed_points = []
+            for appt in non_street_sessions:
+                start_minutes = time_to_minutes(appt['start_time'])
+                end_minutes = time_to_minutes(appt['end_time'])
+                session_type = appt['type']
 
-        # Create a timeline of fixed points (from non-street sessions)
-        fixed_points = []
-        for appt in non_street_sessions:
-            start_minutes = time_to_minutes(appt['start_time'])
-            end_minutes = time_to_minutes(appt['end_time'])
-            session_type = appt['type']
+                # Add constraints for zoom sessions
+                if session_type in ['zoom', 'trial_zoom']:
+                    # Streets must end at least 75 minutes before zoom starts
+                    fixed_points.append({
+                        'time': start_minutes - streets_zoom_break,
+                        'type': 'before_zoom'
+                    })
+                    # Streets can start at least 75 minutes after zoom ends
+                    fixed_points.append({
+                        'time': end_minutes + streets_zoom_break,
+                        'type': 'after_zoom'
+                    })
 
-            # Add constraints for before and after this non-street session
-            if session_type in ['zoom', 'trial_zoom']:
-                # Streets sessions need a 75-minute break from zoom sessions
-                fixed_points.append({
-                    'time': start_minutes - streets_zoom_break,
-                    'type': 'before_zoom'
-                })
-                fixed_points.append({
-                    'time': end_minutes + streets_zoom_break,
-                    'type': 'after_zoom'
-                })
+            # Sort fixed points by time
+            fixed_points.sort(key=lambda x: x['time'])
 
-        # Sort fixed points by time
-        fixed_points.sort(key=lambda x: x['time'])
+            # Compact the street sessions while respecting fixed points
+            compact_street_sessions(street_sessions, fixed_points, required_break)
 
-        # Compact the street sessions as much as possible
-        compact_street_sessions(street_sessions, fixed_points, required_break)
+            # Update the appointments list
+            all_sessions = non_street_sessions + street_sessions
+            all_sessions.sort(key=lambda x: x['start_time'])
 
-        # Update the appointments list with the compacted street sessions
-        all_sessions = street_sessions + non_street_sessions
-        all_sessions.sort(key=lambda x: x['start_time'])
+            # Verify once more that all constraints are maintained
+            all_sessions = enforce_street_zoom_gaps(all_sessions, required_break, streets_zoom_break)
 
-        # Replace the day's appointments with the updated list
-        appointments_by_day[day] = all_sessions
+            # Replace the day's appointments with the updated list
+            appointments_by_day[day] = all_sessions
 
     # Reconstruct the full schedule
     updated_appointments = []
@@ -713,6 +868,74 @@ def minimize_gaps_post_processing(scheduled_appointments, required_break=15, str
     updated_appointments.sort(key=lambda x: (x['date'], x['start_time']))
 
     return updated_appointments
+
+
+def enforce_street_zoom_gaps(appointments, required_break=15, streets_zoom_break=75):
+    """Enforces the 75-minute gap constraint between street and zoom sessions.
+
+    Args:
+        appointments: List of appointments for a single day, sorted by start time
+        required_break: Minimum break between any two sessions (default: 15 minutes)
+        streets_zoom_break: Minimum break required between street and zoom sessions
+
+    Returns:
+        Updated list of appointments with correct gaps
+    """
+    if len(appointments) <= 1:
+        return appointments
+
+    # Create a copy to avoid modifying the original
+    appointments = [appointment.copy() for appointment in appointments]
+
+    # Sort by start time to ensure proper order
+    appointments.sort(key=lambda x: x['start_time'])
+
+    # Check for violations of the constraint (street followed by zoom with gap < 75 minutes)
+    for i in range(len(appointments) - 1):
+        current = appointments[i]
+        next_appt = appointments[i + 1]
+
+        # Check if this is a street-to-zoom transition
+        if current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']:
+            current_end_minutes = time_to_minutes(current['end_time'])
+            next_start_minutes = time_to_minutes(next_appt['start_time'])
+
+            # Calculate the gap
+            gap = next_start_minutes - current_end_minutes
+
+            # If gap is less than required, adjust the next appointment
+            if gap < streets_zoom_break:
+                # Move the zoom session to start 75 minutes after the street session ends
+                new_start_minutes = current_end_minutes + streets_zoom_break
+                new_end_minutes = new_start_minutes + next_appt['duration']
+
+                next_appt['start_time'] = minutes_to_time(new_start_minutes)
+                next_appt['end_time'] = minutes_to_time(new_end_minutes)
+
+                # Now we need to check and fix any overlaps created by this adjustment
+                for j in range(i + 1, len(appointments) - 1):
+                    current_j = appointments[j]
+                    next_j = appointments[j + 1]
+
+                    current_j_end = time_to_minutes(current_j['end_time'])
+                    next_j_start = time_to_minutes(next_j['start_time'])
+
+                    required_gap = streets_zoom_break if (current_j['type'] in ['streets', 'trial_streets'] and
+                                                          next_j['type'] in ['zoom', 'trial_zoom']) else required_break
+
+                    # If there's an overlap or insufficient gap
+                    if next_j_start < current_j_end + required_gap:
+                        # Adjust the next appointment
+                        new_next_start = current_j_end + required_gap
+                        new_next_end = new_next_start + next_j['duration']
+
+                        next_j['start_time'] = minutes_to_time(new_next_start)
+                        next_j['end_time'] = minutes_to_time(new_next_end)
+
+    # Re-sort by start time in case any adjustments changed the order
+    appointments.sort(key=lambda x: x['start_time'])
+
+    return appointments
 
 
 def time_to_minutes(time_str):
@@ -747,8 +970,7 @@ def compact_street_sessions(street_sessions, fixed_points, required_break):
     # Process each street session
     for i, session in enumerate(street_sessions):
         session_start = time_to_minutes(session['start_time'])
-        session_duration = session['duration'] if 'duration' in session else time_to_minutes(
-            session['end_time']) - session_start
+        session_duration = session['duration']
 
         # Check if we need to delay this session due to a fixed point
         for fixed_point in fixed_points:
@@ -759,9 +981,6 @@ def compact_street_sessions(street_sessions, fixed_points, required_break):
         # Update the session's start and end times
         new_start = current_time
         new_end = new_start + session_duration
-
-        # Make sure the new times don't overlap with working hours
-        # In a real implementation, you'd check against working hours here
 
         # Update the session times
         session['start_time'] = minutes_to_time(new_start)
@@ -1116,7 +1335,8 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             <div class="summary-box">
                 <h3>Schedule Overview</h3>
                 <p>Total appointments: {len(client_availabilities)}</p>
-                <p>Scheduled: {len(scheduled_appointments)} ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
+                <p>Scheduled: {len(scheduled_appointments)} 
+                ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
                 <p>Unscheduled: {len(unscheduled_clients)}</p>
             </div>
     """
@@ -1249,7 +1469,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
     print(f"HTML schedule report exported to {output_file}")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description='Schedule appointments based on constraints and client availability.')
     parser.add_argument('input_file', type=str, help='Path to the input JSON file')
     parser.add_argument('--output', type=str, default='schedule.json', help='Path to the output JSON file')
@@ -1275,3 +1495,7 @@ if __name__ == "__main__":
     print(f"\nExports completed:")
     print(f"- JSON: {args.output}")
     print(f"- HTML Report: {args.html}")
+
+
+if __name__ == "__main__":
+    main()
