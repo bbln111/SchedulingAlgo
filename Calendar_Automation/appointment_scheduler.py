@@ -57,11 +57,27 @@ def day_number_to_name(day_number):
 def get_working_hours(day_number):
     """Return working hours for the given day as (start_minute, end_minute)."""
     if 0 <= day_number <= 4:  # Sunday to Thursday
-        return (10 * 60, 23 * 60)  # 10:00 to 23:00
+        return 10 * 60, 23 * 60  # 10:00 to 23:00
     elif day_number == 5:  # Friday
-        return (12 * 60 + 30, 17 * 60)  # 12:30 to 17:00
+        return 12 * 60 + 30, 17 * 60  # 12:30 to 17:00
     else:  # Saturday
         return None  # No working hours on Saturday
+
+
+def python_weekday_to_our_weekday(python_weekday):
+    """
+    Convert Python's weekday (0=Monday, 1=Tuesday, ..., 6=Sunday)
+    to our weekday system (0=Sunday, 1=Monday, ..., 6=Saturday)
+    """
+    return (python_weekday + 1) % 7
+
+
+def our_weekday_to_python_weekday(our_weekday):
+    """
+    Convert our weekday system (0=Sunday, 1=Monday, ..., 6=Saturday)
+    to Python's weekday (0=Monday, 1=Tuesday, ..., 6=Sunday)
+    """
+    return (our_weekday - 1) % 7
 
 
 def schedule_appointments(json_file, max_street_gap=30):
@@ -72,15 +88,16 @@ def schedule_appointments(json_file, max_street_gap=30):
         max_street_gap (int): Maximum gap in minutes allowed between consecutive street sessions
     """
     # Load data from JSON file
-    with open(json_file, 'r') as f:
-        data = json.load(f)
+    with open(json_file, 'r') as constraints_file:
+        json_data = json.load(constraints_file)
 
-    start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
-    clients = data['appointments']
+    constraint_start_date = datetime.strptime(json_data['start_date'], '%Y-%m-%d')
+    clients = json_data['appointments']
 
     # Print summary of input data
     print(f"\n=== Input Data Summary ===")
-    print(f"Start date: {start_date.strftime('%Y-%m-%d')} ({day_number_to_name(start_date.weekday())})")
+    print(f"Start date: {constraint_start_date.strftime('%Y-%m-%d')} "
+          f"({day_number_to_name(constraint_start_date.weekday())})")
     print(f"Total clients: {len(clients)}")
     print(f"Maximum gap between street sessions: {max_street_gap} minutes")
 
@@ -193,7 +210,9 @@ def schedule_appointments(json_file, max_street_gap=30):
         for availability in client.get('days', []):
             day_name = availability['day']
             day_number = day_name_to_number(day_name)
-            day_offset = (day_number - start_date.weekday() + 7) % 7
+            python_weekday = constraint_start_date.weekday()  # 0-6 (Monday-Sunday)
+            our_start_weekday = python_weekday_to_our_weekday(python_weekday)  # 0-6 (Sunday-Saturday)
+            day_offset = (day_number - our_start_weekday + 7) % 7
 
             # Skip Saturdays as they are not working days
             if day_number == 6:
@@ -301,7 +320,6 @@ def schedule_appointments(json_file, max_street_gap=30):
 
     for client in client_availabilities:
         client_id = client['id']
-        session_type = client['type']
 
         # Create a variable for the start time of the appointment
         appointment_vars[client_id] = model.NewIntVar(0, horizon_minutes, f'start_{client_id}')
@@ -473,10 +491,12 @@ def schedule_appointments(json_file, max_street_gap=30):
                              appointment_scheduled_vars[client2_id].Not()]).OnlyEnforceIf(both_scheduled.Not())
 
             # If both are scheduled, ensure they don't overlap
-            model.Add(appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]) \
-                .OnlyEnforceIf([both_scheduled, client1_before_client2])
-            model.Add(appointment_vars[client2_id] + client2_duration + required_break <= appointment_vars[client1_id]) \
-                .OnlyEnforceIf([both_scheduled, client2_before_client1])
+            model.Add(
+                appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]
+            ).OnlyEnforceIf([both_scheduled, client1_before_client2])
+            model.Add(
+                appointment_vars[client2_id] + client2_duration + required_break <= appointment_vars[client1_id]
+            ).OnlyEnforceIf([both_scheduled, client2_before_client1])
 
             # Ensure that exactly one of the non-overlap constraints is true if both are scheduled
             model.AddBoolOr([client1_before_client2, client2_before_client1]).OnlyEnforceIf(both_scheduled)
@@ -531,7 +551,7 @@ def schedule_appointments(json_file, max_street_gap=30):
                 day_number = solver.Value(appointment_day_vars[client_id])
 
                 # Calculate the date and time
-                appointment_date = start_date + timedelta(days=(day_number - start_date.weekday() + 7) % 7)
+                appointment_date = constraint_start_date + timedelta(days=(day_number - our_start_weekday + 7) % 7)
                 start_hour = (start_time_minutes % (24 * 60)) // 60
                 start_minute = (start_time_minutes % (24 * 60)) % 60
 
@@ -592,16 +612,18 @@ def schedule_appointments(json_file, max_street_gap=30):
                             appt_day = day_name_to_number(appt['day'])
 
                             if appt_day in client_days:
-                                if client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in ['streets',
-                                                                                                            'trial_streets']:
+                                if (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in
+                                        ['streets', 'trial_streets']):
+                                    conflicts.append(f"Potential street session conflict with Client "
+                                                     f"{appt['client_id']} ({appt['day']} {appt['start_time']})")
+                                elif (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in
+                                      ['zoom', 'trial_zoom']) or \
+                                        (client_data['type'] in ['zoom', 'trial_zoom'] and appt['type'] in
+                                         ['streets', 'trial_streets']):
                                     conflicts.append(
-                                        f"Potential street session conflict with Client {appt['client_id']} ({appt['day']} {appt['start_time']})")
-                                elif (client_data['type'] in ['streets', 'trial_streets'] and appt['type'] in ['zoom',
-                                                                                                               'trial_zoom']) or \
-                                        (client_data['type'] in ['zoom', 'trial_zoom'] and appt['type'] in ['streets',
-                                                                                                            'trial_streets']):
-                                    conflicts.append(
-                                        f"Potential streets-zoom transition with Client {appt['client_id']} ({appt['day']} {appt['start_time']})")
+                                        f"Potential streets-zoom transition with Client {appt['client_id']} "
+                                        f"({appt['day']} {appt['start_time']})"
+                                    )
 
                         if conflicts:
                             print(f"    Possible conflicts:")
@@ -1116,7 +1138,8 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             <div class="summary-box">
                 <h3>Schedule Overview</h3>
                 <p>Total appointments: {len(client_availabilities)}</p>
-                <p>Scheduled: {len(scheduled_appointments)} ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
+                <p>Scheduled: {len(scheduled_appointments)} 
+                ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
                 <p>Unscheduled: {len(unscheduled_clients)}</p>
             </div>
     """
@@ -1249,7 +1272,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
     print(f"HTML schedule report exported to {output_file}")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description='Schedule appointments based on constraints and client availability.')
     parser.add_argument('input_file', type=str, help='Path to the input JSON file')
     parser.add_argument('--output', type=str, default='schedule.json', help='Path to the output JSON file')
@@ -1275,3 +1298,7 @@ if __name__ == "__main__":
     print(f"\nExports completed:")
     print(f"- JSON: {args.output}")
     print(f"- HTML Report: {args.html}")
+
+
+if __name__ == "__main__":
+    main()
