@@ -80,12 +80,13 @@ def our_weekday_to_python_weekday(our_weekday):
     return (our_weekday - 1) % 7
 
 
-def schedule_appointments(json_file, max_street_gap=30):
+def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_day=270):
     """Schedule appointments based on constraints and client availability.
 
     Args:
         json_file (str): Path to the input JSON file
         max_street_gap (int): Maximum gap in minutes allowed between consecutive street sessions
+        max_street_minutes_per_day (int): Maximum total minutes of street sessions allowed per day
     """
     # Load data from JSON file
     with open(json_file, 'r') as constraints_file:
@@ -100,6 +101,7 @@ def schedule_appointments(json_file, max_street_gap=30):
           f"({day_number_to_name(constraint_start_date.weekday())})")
     print(f"Total clients: {len(clients)}")
     print(f"Maximum gap between street sessions: {max_street_gap} minutes")
+    print(f"Maximum street session minutes per day: {max_street_minutes_per_day} minutes")
 
     # Count session types
     session_counts = {
@@ -139,6 +141,9 @@ def schedule_appointments(json_file, max_street_gap=30):
         client_id = client['id']
         session_type = client['type']
         priority = client['priority']
+        # Add session time if available
+        session_time = client.get('time', None)
+        time_info = f"({session_time} min)" if session_time else ""
 
         # Skip excluded clients in the detailed list
         if priority == "Exclude":
@@ -164,14 +169,15 @@ def schedule_appointments(json_file, max_street_gap=30):
 
         if available_days:
             available_days_str = ", ".join(available_days)
-            print(f"  - Client {client_id}: {session_type} (Priority: {priority}) - Available on {available_days_str}")
+            print(f"  - Client {client_id}: {session_type} {time_info} (Priority: {priority}) - "
+                  f"Available on {available_days_str}")
         else:
-            print(f"  - Client {client_id}: {session_type} (Priority: {priority}) - No availability")
+            print(f"  - Client {client_id}: {session_type} {time_info} (Priority: {priority}) - No availability")
 
     print("\n=== Starting Scheduler ===")
 
-    # Session type durations
-    session_durations = {
+    # Default session type durations (used if not specified in client data)
+    default_session_durations = {
         'trial_streets': 120,
         'streets': 60,
         'trial_zoom': 90,
@@ -191,7 +197,12 @@ def schedule_appointments(json_file, max_street_gap=30):
         client_id = client['id']
         client_priority = client['priority']
         session_type = client['type']
-        session_duration = session_durations[session_type]
+
+        # Use 'time' field if provided, otherwise use default durations
+        if 'time' in client and client['time'] is not None:
+            session_duration = client['time']
+        else:
+            session_duration = default_session_durations[session_type]
 
         # Skip clients with "Exclude" priority
         if client_priority == "Exclude":
@@ -354,6 +365,7 @@ def schedule_appointments(json_file, max_street_gap=30):
     # Create arrays to track street sessions per day
     days_with_streets = {}
     street_sessions_per_day = {}
+    street_minutes_per_day = {}  # Track total minutes of street sessions per day
     street_sessions_by_day = {}  # Keep track of street sessions for each day
 
     for day in range(7):
@@ -362,10 +374,12 @@ def schedule_appointments(json_file, max_street_gap=30):
             continue
 
         street_sessions_for_day = []
+        street_session_durations = []  # List to store the durations of street sessions for this day
         street_sessions_by_day[day] = []  # Initialize array to store street session clients for this day
 
         for client_id, client in [(c['id'], c) for c in client_availabilities]:
             session_type = client['type']
+            session_duration = client['duration']
 
             # Check if this is a streets-type session
             if session_type in ['streets', 'trial_streets']:
@@ -380,12 +394,22 @@ def schedule_appointments(json_file, max_street_gap=30):
                 model.AddImplication(is_scheduled_this_day, appointment_scheduled_vars[client_id])
 
                 street_sessions_for_day.append(is_scheduled_this_day)
-                street_sessions_by_day[day].append((client_id, client['duration'], is_scheduled_this_day))
+                street_sessions_by_day[day].append((client_id, session_duration, is_scheduled_this_day))
+
+                # Add this session's duration to our tracking list, multiplied by whether it's scheduled
+                street_session_durations.append(session_duration * is_scheduled_this_day)
 
         if street_sessions_for_day:
             # Create a variable to count streets sessions on this day
             street_sessions_per_day[day] = model.NewIntVar(0, len(street_sessions_for_day), f'streets_on_day_{day}')
             model.Add(street_sessions_per_day[day] == sum(street_sessions_for_day))
+
+            # Create a variable to track total minutes of street sessions on this day
+            street_minutes_per_day[day] = model.NewIntVar(0, 1000, f'street_minutes_on_day_{day}')
+            model.Add(street_minutes_per_day[day] == sum(street_session_durations))
+
+            # Add constraint to limit total minutes of street sessions per day
+            model.Add(street_minutes_per_day[day] <= max_street_minutes_per_day)
 
             # Variable to indicate if this day has at least 2 street sessions
             days_with_streets[day] = model.NewBoolVar(f'day_{day}_has_streets')
@@ -969,7 +993,6 @@ def compact_street_sessions(street_sessions, fixed_points, required_break):
 
     # Process each street session
     for i, session in enumerate(street_sessions):
-        session_start = time_to_minutes(session['start_time'])
         session_duration = session['duration']
 
         # Check if we need to delay this session due to a fixed point
