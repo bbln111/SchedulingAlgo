@@ -1,0 +1,429 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Schedule Report</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            h1, h2, h3 {
+                color: #2c3e50;
+            }
+            .header {
+                border-bottom: 2px solid #3498db;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+            }
+            .summary {
+                background-color: #f8f9fa;
+                border-radius: 5px;
+                padding: 15px;
+                margin-bottom: 20px;
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+            }
+            .summary-box {
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 10px;
+                margin: 5px;
+                flex: 1;
+                min-width: 200px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .day-schedule {
+                margin-bottom: 30px;
+            }
+            .day-header {
+                background-color: #3498db;
+                color: white;
+                padding: 10px;
+                border-radius: 5px 5px 0 0;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }
+            th, td {
+                padding: 12px 15px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+            tr:hover {
+                background-color: #f5f5f5;
+            }
+            .streets {
+                background-color: #d4edda;
+            }
+            .trial_streets {
+                background-color: #c3e6cb;
+            }
+            .zoom {
+                background-color: #d1ecf1;
+            }
+            .trial_zoom {
+                background-color: #bee5eb;
+            }
+            .unscheduled {
+                background-color: #f8d7da;
+                margin-top: 30px;
+                border-radius: 5px;
+                padding: 15px;
+            }
+            .progress {
+                height: 20px;
+                width: 100%;
+                background-color: #e9ecef;
+                border-radius: 20px;
+                position: relative;
+                margin-top: 5px;
+            }
+            .progress-bar {
+                height: 100%;
+                border-radius: 20px;
+                background-color: #3498db;
+                text-align: center;
+                color: white;
+                line-height: 20px;
+                font-size: 12px;
+            }
+            .good {
+                background-color: #28a745;
+            }
+            .medium {
+                background-color: #ffc107;
+            }
+            .poor {
+                background-color: #dc3545;
+            }
+            .badge {
+                display: inline-block;
+                padding: 3px 7px;
+                font-size: 12px;
+                font-weight: bold;
+                line-height: 1;
+                text-align: center;
+                white-space: nowrap;
+                vertical-align: baseline;
+                border-radius: 10px;
+                color: white;
+            }
+            .badge-streets {
+                background-color: #28a745;
+            }
+            .badge-trial_streets {
+                background-color: #20c997;
+            }
+            .badge-zoom {
+                background-color: #17a2b8;
+            }
+            .badge-trial_zoom {
+                background-color: #0dcaf0;
+            }
+            .empty-message {
+                text-align: center;
+                padding: 20px;
+                color: #6c757d;
+            }
+            footer {
+                margin-top: 50px;
+                padding-top: 20px;
+                border-top: 1px solid #ddd;
+                text-align: center;
+                font-size: 14px;
+                color: #6c757d;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Appointment Schedule Report</h1>
+            <p>Scheduling period starting: 2025-03-02</p>
+            <p>Report generated: 2025-03-18 16:35</p>
+        </div>
+
+        <div class="summary">
+            <div class="summary-box">
+                <h3>Schedule Overview</h3>
+                <p>Total appointments: 15</p>
+                <p>Scheduled: 15 
+                (100%)</p>
+                <p>Unscheduled: 0</p>
+            </div>
+    
+            <div class="summary-box">
+                <h3>Streets</h3>
+                <p>Scheduled: 8 / 8</p>
+                <div class="progress">
+                    <div class="progress-bar good" style="width: 100%">100%</div>
+                </div>
+            </div>
+            
+            <div class="summary-box">
+                <h3>Trial Streets</h3>
+                <p>Scheduled: 2 / 2</p>
+                <div class="progress">
+                    <div class="progress-bar good" style="width: 100%">100%</div>
+                </div>
+            </div>
+            
+            <div class="summary-box">
+                <h3>Zoom</h3>
+                <p>Scheduled: 4 / 4</p>
+                <div class="progress">
+                    <div class="progress-bar good" style="width: 100%">100%</div>
+                </div>
+            </div>
+            
+            <div class="summary-box">
+                <h3>Trial Zoom</h3>
+                <p>Scheduled: 1 / 1</p>
+                <div class="progress">
+                    <div class="progress-bar good" style="width: 100%">100%</div>
+                </div>
+            </div>
+            
+        </div>
+    
+        <h2>Daily Schedule</h2>
+        
+            <div class="day-schedule">
+                <div class="day-header">
+                    <h3>Sunday (2025-03-02)</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Client ID</th>
+                            <th>Session Type</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            
+                        <tr class="streets">
+                            <td>16:00</td>
+                            <td>17:00</td>
+                            <td>1</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="trial_streets">
+                            <td>17:15</td>
+                            <td>19:15</td>
+                            <td>7</td>
+                            <td><span class="badge badge-trial_streets">trial_streets</span></td>
+                            <td>120 min</td>
+                        </tr>
+                
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="day-schedule">
+                <div class="day-header">
+                    <h3>Monday (2025-03-03)</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Client ID</th>
+                            <th>Session Type</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            
+                        <tr class="streets">
+                            <td>17:00</td>
+                            <td>18:00</td>
+                            <td>2</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="trial_streets">
+                            <td>18:15</td>
+                            <td>20:15</td>
+                            <td>8</td>
+                            <td><span class="badge badge-trial_streets">trial_streets</span></td>
+                            <td>120 min</td>
+                        </tr>
+                
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="day-schedule">
+                <div class="day-header">
+                    <h3>Wednesday (2025-03-05)</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Client ID</th>
+                            <th>Session Type</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            
+                        <tr class="zoom">
+                            <td>16:00</td>
+                            <td>17:00</td>
+                            <td>4</td>
+                            <td><span class="badge badge-zoom">zoom</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="zoom">
+                            <td>17:45</td>
+                            <td>18:45</td>
+                            <td>6</td>
+                            <td><span class="badge badge-zoom">zoom</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="zoom">
+                            <td>19:00</td>
+                            <td>20:00</td>
+                            <td>5</td>
+                            <td><span class="badge badge-zoom">zoom</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="day-schedule">
+                <div class="day-header">
+                    <h3>Thursday (2025-03-06)</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Client ID</th>
+                            <th>Session Type</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            
+                        <tr class="streets">
+                            <td>12:00</td>
+                            <td>13:00</td>
+                            <td>13</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="streets">
+                            <td>13:15</td>
+                            <td>14:15</td>
+                            <td>10</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="zoom">
+                            <td>15:30</td>
+                            <td>16:30</td>
+                            <td>12</td>
+                            <td><span class="badge badge-zoom">zoom</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="streets">
+                            <td>16:45</td>
+                            <td>17:45</td>
+                            <td>3</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="trial_zoom">
+                            <td>20:30</td>
+                            <td>22:00</td>
+                            <td>11</td>
+                            <td><span class="badge badge-trial_zoom">trial_zoom</span></td>
+                            <td>90 min</td>
+                        </tr>
+                
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="day-schedule">
+                <div class="day-header">
+                    <h3>Friday (2025-03-07)</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Client ID</th>
+                            <th>Session Type</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            
+                        <tr class="streets">
+                            <td>12:45</td>
+                            <td>13:45</td>
+                            <td>14</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="streets">
+                            <td>14:00</td>
+                            <td>15:00</td>
+                            <td>9</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                        <tr class="streets">
+                            <td>15:15</td>
+                            <td>16:15</td>
+                            <td>15</td>
+                            <td><span class="badge badge-streets">streets</span></td>
+                            <td>60 min</td>
+                        </tr>
+                
+                    </tbody>
+                </table>
+            </div>
+            
+        <footer>
+            <p>Generated by Appointment Scheduler</p>
+        </footer>
+    </body>
+    </html>
+    

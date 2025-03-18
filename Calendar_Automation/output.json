@@ -1,71 +1,72 @@
 {
     "filled_appointments": [
         {
-            "id": "1680707276",
+            "id": "10",
             "type": "zoom",
-            "start_time": "2025-03-14T14:15:00",
-            "end_time": "2025-03-14T15:30:00"
+            "start_time": "2025-03-03T18:00:00",
+            "end_time": "2025-03-03T19:15:00"
         },
         {
-            "id": "1780413706",
+            "id": "11",
             "type": "zoom",
-            "start_time": "2025-03-11T21:15:00",
-            "end_time": "2025-03-11T22:30:00"
+            "start_time": "2025-03-03T10:00:00",
+            "end_time": "2025-03-03T11:15:00"
         },
         {
-            "id": "1680614077",
+            "id": "12",
             "type": "zoom",
-            "start_time": "2025-03-12T20:15:00",
-            "end_time": "2025-03-12T21:30:00"
+            "start_time": "2025-03-06T21:00:00",
+            "end_time": "2025-03-06T22:15:00"
         },
         {
-            "id": "1837404310",
+            "id": "13",
             "type": "zoom",
-            "start_time": "2025-03-12T18:15:00",
-            "end_time": "2025-03-12T19:30:00"
+            "start_time": "2025-03-03T11:15:00",
+            "end_time": "2025-03-03T12:30:00"
         },
         {
-            "id": "1680659023",
+            "id": "14",
             "type": "zoom",
-            "start_time": "2025-03-09T20:00:00",
-            "end_time": "2025-03-09T21:15:00"
+            "start_time": "2025-03-05T15:45:00",
+            "end_time": "2025-03-05T17:00:00"
         },
         {
-            "id": "1680659189",
-            "type": "zoom",
-            "start_time": "2025-03-13T19:30:00",
-            "end_time": "2025-03-13T20:45:00"
-        },
-        {
-            "id": "1794099447",
-            "type": "zoom",
-            "start_time": "2025-03-11T17:00:00",
-            "end_time": "2025-03-11T18:15:00"
-        },
-        {
-            "id": "1737680030",
-            "type": "zoom",
-            "start_time": "2025-03-11T18:15:00",
-            "end_time": "2025-03-11T19:30:00"
-        },
-        {
-            "id": "1842304580",
-            "type": "zoom",
-            "start_time": "2025-03-11T20:00:00",
-            "end_time": "2025-03-11T21:15:00"
-        },
-        {
-            "id": "1842304580-1",
-            "type": "zoom",
-            "start_time": "2025-03-10T20:45:00",
-            "end_time": "2025-03-10T22:00:00"
-        },
-        {
-            "id": "1737679897",
-            "type": "zoom",
-            "start_time": "2025-03-10T17:45:00",
-            "end_time": "2025-03-10T19:00:00"
+            "id": "15",
+            "type": "trial_zoom",
+            "start_time": "2025-03-02T20:00:00",
+            "end_time": "2025-03-02T21:45:00"
         }
     ],
-    "unfilled_appointments": []
+    "unfilled_appointments": [],
+    "validation": {
+        "valid": true,
+        "issues": []
+    },
+    "type_balance": {
+        "streets": {
+            "scheduled": 0,
+            "total": 7,
+            "rate": 0.0
+        },
+        "trial_streets": {
+            "scheduled": 0,
+            "total": 2,
+            "rate": 0.0
+        },
+        "zoom": {
+            "scheduled": 5,
+            "total": 5,
+            "rate": 1.0
+        },
+        "trial_zoom": {
+            "scheduled": 1,
+            "total": 1,
+            "rate": 1.0
+        },
+        "field": {
+            "scheduled": 0,
+            "total": 0,
+            "rate": 1.0
+        }
+    }
 }

@@ -10,8 +10,15 @@ url = "https://api.monday.com/v2"
 api_key = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQzNDY0NDY5OCwiYWFpIjoxMSwidWlkIjo2MzQ0MzI4MCwiaWFkIjoiMjAyNC0xMS0xMFQwOTo0MzoxNi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MjQ0MTMxODUsInJnbiI6ImV1YzEifQ.EjiCaRi_3RiHpQIH8SXCIiowwuqc1QbVNjyHZMK6who"
 
 KEY_DAYS_REQUESTED = 'numeric_mknnxrbp'
-DEFAULT_REQUESTED_DAYS = 1
+KEY_MEETING_LOCATION = 'label_mkn677r1'
+ZOOM_LOCATION_KEY = 3
+FIELD_LOCATION_KEY = 0
+TRIAL_ZOOM_LOCATION_KEY = 5
+TRIAL_FIELD_LOCATION_KEY = 4
 
+DEFAULT_LOCATION = ZOOM_LOCATION_KEY
+DEFAULT_REQUESTED_DAYS = 1
+WHATSUP_BOT_TIME_FORMAT = "%H:%M"
 
 
 #def try_parse_as_date(value: str):
@@ -23,6 +30,7 @@ DEFAULT_REQUESTED_DAYS = 1
 #    except Exception:
 #        return False, None
 
+
 def parse_time(value: str):
     logger.info(value)
     # Remove extra quotes -> "9:00-12:00"
@@ -31,6 +39,8 @@ def parse_time(value: str):
     # Split into start/end -> ["9:00", "12:00"]
     start_str, end_str = value_temp.split('-')
     # Parse hours, minutes
+    print(start_str, end_str, value_temp, "hola")
+
     start_hour, start_minute, _ = map(int, start_str.split(':'))
     end_hour, end_minute, _ = map(int, end_str.split(':'))
 
@@ -84,13 +94,28 @@ def _get_requested_days(big_dict: dict):
     request_as_int = int(clean_string)
     return request_as_int
 
+def _get_meeting_location(big_dict: dict):
+    location_string = big_dict.get(KEY_MEETING_LOCATION, None)
+    if location_string is None:
+        '''JUST IN CASE'''
+        return DEFAULT_LOCATION
+    clean_string = location_string.strip("\"").strip("\'")
+    index = json.loads(clean_string).get("index")
+    #if not index_as_string.isnumeric():
+    #    return DEFAULT_REQUESTED_DAYS
+    converter_list = ['streets', '', '', 'zoom', 'trial_streets', 'trial_zoom']
+    #index = int(index_as_string)
+    if index < 0 and index >= len(converter_list):
+        raise Exception("index out of range location location location")
+    return converter_list[index]
+
 def parse_column_dict(big_dict: dict):
     date = _parse_day(big_dict)
     days_list = _get_days(big_dict)
     has_timespan = len([y for y in days_list if y is not None]) > 0
     requested_amount = _get_requested_days(big_dict)
-
-    return date, days_list, has_timespan, requested_amount
+    location = _get_meeting_location(big_dict)
+    return date, days_list, has_timespan, requested_amount, location
 
 def duplicate_client(big_dict: dict, client_id, factor):
     value = big_dict.get(client_id)
@@ -132,34 +157,7 @@ def get_board_data():
     return data
 
 def get_timespans_raw():
-    #headers = {
-    #    "Authorization": api_key,
-    #    "Content-Type": "application/json"
-    #}
 
-    #query = f"""
-    #query GetBoardItems {{
-    #  boards(ids: {BOARD_ID}) {{
-    #    items_page(limit: 20) {{
-    #      items {{
-    #        id
-    #        name
-    #        subitems {{
-    #          id
-    #          name
-    #          column_values {{
-    #            id
-    #            value
-    #          }}
-    #        }}
-    #      }}
-    #    }}
-    #  }}
-    #}}
-    #"""
-
-    #response = requests.post(url, json={"query": query}, headers=headers)
-    #data = response.json()
     data = get_board_data()
     if "errors" in data:
         logger.error("Errors:", data["errors"])
@@ -189,14 +187,15 @@ def get_timespans_raw():
                 if status == 1:
                     continue
 
-                date, days_list, has_timespan, requested_amount = parse_column_dict(columns_dict)
-
+                date, days_list, has_timespan, requested_amount, location = parse_column_dict(columns_dict)
+                #days_list_with_location_last = # plaster
+                days_list.append(location)
                 if has_timespan:
                     if not client_id in save_dictionary:
                         save_dictionary[client_id] = {"name": client_name, date: days_list }
                     else:
                         save_dictionary[client_id][date] = days_list
-                duplicate_client(save_dictionary, client_id, requested_amount)
+                #duplicate_client(save_dictionary, client_id, requested_amount)
     return save_dictionary
 
 def parse_time_frame(start_date, times_string, day_index):
@@ -226,6 +225,15 @@ def save_to_files(data_dict: dict, file_path: str):
             json.dump(data_to_file, f, ensure_ascii=False, indent=2)
         return output_file_name
 
+def try_parse_date(date, formats = ["%H:%M:%S", "%H:%M"]):
+    for format in formats:
+        try:
+            return datetime.datetime.strptime(date, format)
+        except Exception:
+            pass
+    raise ValueError("Invalid date format")
+
+
 def authistic_day_list_fix(days_list: list):
     """add here bandages for the bot giving wrong format timespan"""
     ret_list = []
@@ -245,7 +253,7 @@ def authistic_day_list_fix(days_list: list):
             continue
         elif '-' not in day:
             d = day.strip("\"").strip("\'")
-            time_a = datetime.datetime.strptime(d, "%H:%M:%S")
+            time_a = try_parse_date(d)#datetime.datetime.strptime(d, "%H:%M:%S")
             time_b = time_a + datetime.timedelta(hours=2)
             span_as_string = f"{time_a.strftime('%H:%M:%S')}-{time_b.strftime('%H:%M:%S')}"
             ret_list.append(span_as_string)
@@ -266,10 +274,7 @@ def convent_to_input_file_format(monday_dict: dict):
         type__r = "zoom"
         time = 60
         raw_dict = dict(monday_dict[key])
-
         name, start_date, days_list = None, None, None
-
-
 
         for key in raw_dict.keys():
             if key is None:
@@ -282,6 +287,7 @@ def convent_to_input_file_format(monday_dict: dict):
 
         if days_list is None: # כפיר מוכתרי
             continue
+        location = days_list[-1]
         logger.info(f"name: {name} \t start_date: {start_date} \t days_list: {days_list}")
         fixed_days_list = authistic_day_list_fix(days_list)
         logger.info(f"fixed_days_list: {fixed_days_list}")
@@ -298,7 +304,8 @@ def convent_to_input_file_format(monday_dict: dict):
             if test_time_frame[0] is None:
                 test_time_frame.pop(0)
 
-        appointment = {"id": id, "priority": priority, "type": type__r, "time": time, "days": days}
+        #appointment = {"id": id, "priority": priority, "type": type__r, "time": time, "days": days}
+        appointment = {"id": id, "priority": priority, "type": location, "time": time, "days": days}
         if start_date in return_dict:
             return_dict[start_date].append(appointment)
         else:

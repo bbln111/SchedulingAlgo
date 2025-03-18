@@ -81,6 +81,7 @@ def main():
         input_file_name = _collect_input()
         logger.info(f"Using collected input file: {input_file_name}")
 
+
     # Run the scheduling algorithm
     output_from_script = run_on_file(input_file_name)
     logger.info(f"Initial script run result: {len(output_from_script.get('filled_appointments', []))} appointments filled")

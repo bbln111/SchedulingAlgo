@@ -1,0 +1,126 @@
+{
+  "filled_appointments": [
+    {
+      "id": "1",
+      "type": "streets",
+      "start_time": "2025-03-02T16:00:00",
+      "end_time": "2025-03-02T17:00:00"
+    },
+    {
+      "id": "7",
+      "type": "trial_streets",
+      "start_time": "2025-03-02T17:15:00",
+      "end_time": "2025-03-02T19:15:00"
+    },
+    {
+      "id": "2",
+      "type": "streets",
+      "start_time": "2025-03-03T17:00:00",
+      "end_time": "2025-03-03T18:00:00"
+    },
+    {
+      "id": "8",
+      "type": "trial_streets",
+      "start_time": "2025-03-03T18:15:00",
+      "end_time": "2025-03-03T20:15:00"
+    },
+    {
+      "id": "4",
+      "type": "zoom",
+      "start_time": "2025-03-05T16:00:00",
+      "end_time": "2025-03-05T17:00:00"
+    },
+    {
+      "id": "6",
+      "type": "zoom",
+      "start_time": "2025-03-05T17:45:00",
+      "end_time": "2025-03-05T18:45:00"
+    },
+    {
+      "id": "5",
+      "type": "zoom",
+      "start_time": "2025-03-05T19:00:00",
+      "end_time": "2025-03-05T20:00:00"
+    },
+    {
+      "id": "13",
+      "type": "streets",
+      "start_time": "2025-03-06T12:00:00",
+      "end_time": "2025-03-06T13:00:00"
+    },
+    {
+      "id": "10",
+      "type": "streets",
+      "start_time": "2025-03-06T13:15:00",
+      "end_time": "2025-03-06T14:15:00"
+    },
+    {
+      "id": "12",
+      "type": "zoom",
+      "start_time": "2025-03-06T15:30:00",
+      "end_time": "2025-03-06T16:30:00"
+    },
+    {
+      "id": "3",
+      "type": "streets",
+      "start_time": "2025-03-06T16:45:00",
+      "end_time": "2025-03-06T17:45:00"
+    },
+    {
+      "id": "11",
+      "type": "trial_zoom",
+      "start_time": "2025-03-06T20:30:00",
+      "end_time": "2025-03-06T22:00:00"
+    },
+    {
+      "id": "14",
+      "type": "streets",
+      "start_time": "2025-03-07T12:45:00",
+      "end_time": "2025-03-07T13:45:00"
+    },
+    {
+      "id": "9",
+      "type": "streets",
+      "start_time": "2025-03-07T14:00:00",
+      "end_time": "2025-03-07T15:00:00"
+    },
+    {
+      "id": "15",
+      "type": "streets",
+      "start_time": "2025-03-07T15:15:00",
+      "end_time": "2025-03-07T16:15:00"
+    }
+  ],
+  "unfilled_appointments": [],
+  "validation": {
+    "valid": true,
+    "issues": []
+  },
+  "type_balance": {
+    "streets": {
+      "scheduled": 8,
+      "total": 8,
+      "rate": 1.0
+    },
+    "trial_streets": {
+      "scheduled": 2,
+      "total": 2,
+      "rate": 1.0
+    },
+    "zoom": {
+      "scheduled": 4,
+      "total": 4,
+      "rate": 1.0
+    },
+    "trial_zoom": {
+      "scheduled": 1,
+      "total": 1,
+      "rate": 1.0
+    },
+    "field": {
+      "scheduled": 0,
+      "total": 0,
+      "rate": 1.0
+    }
+  }
+}

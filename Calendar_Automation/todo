@@ -1,4 +1,8 @@
-logger - Done
+Currently it seems like schedule_appointments fails to parse the input properly
+I've added a small fix search # TODO PLASTER: to find, feel free to remove it
+with the fix we still fail to extract the date for some reason and keeps it in time delta from sunday date
 
-integration tests
-unit tests?
+also failure reason only seen in logs and not in console.
+
+also we will need to add the condition, foreach customer c there are no two appointments in the same day
+the customer id duplication was commented out, to find search #duplicate

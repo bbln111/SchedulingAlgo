@@ -20,6 +20,7 @@ def run_on_file(input_file_path):
     Returns:
         dict: Scheduling results formatted to match the expected output structure
     """
+
     try:
         logger.info(f"Starting scheduling on file: {input_file_path}")
 
@@ -72,9 +73,19 @@ def convert_scheduler_output(scheduled_appointments, input_file_path):
     unfilled_appointments = []
     validation_issues = []
 
+    # TODO PLASTER:
+    new_scheduled_appointments = scheduled_appointments
+    for appointment in scheduled_appointments:
+        if appointment is not None and isinstance(appointment, list)  and len(appointment) > 0:
+            new_scheduled_appointments = appointment
+            break
+
+    scheduled_appointments = new_scheduled_appointments
     # Process filled appointments
     for appointment in scheduled_appointments:
-        client_id = appointment['client_id']
+        #client_id = appointment['client_id']
+        client_id = appointment['id']
+
         session_type = appointment['type']
 
         # Parse start and end times to ISO format
