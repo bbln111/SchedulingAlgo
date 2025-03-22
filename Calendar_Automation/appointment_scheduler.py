@@ -80,6 +80,200 @@ def our_weekday_to_python_weekday(our_weekday):
     return (our_weekday - 1) % 7
 
 
+def enforce_consecutive_street_sessions(scheduled_appointments, min_street_gap=15, max_street_gap=30):
+    """
+    Forces street sessions to be consecutive with no more than max_street_gap minutes between them.
+    Attempts to use min_street_gap when possible, only expanding to max_street_gap when necessary.
+
+    Args:
+        scheduled_appointments: List of scheduled appointment dictionaries
+        min_street_gap: Preferred minimum gap between consecutive street sessions (default: 15)
+        max_street_gap: Maximum gap allowed between consecutive street sessions (default: 30)
+
+    Returns:
+        Updated list of appointments
+    """
+    # Group appointments by day
+    appointments_by_day = {}
+    for appt in scheduled_appointments:
+        day = appt['date']
+        if day not in appointments_by_day:
+            appointments_by_day[day] = []
+        appointments_by_day[day].append(appt.copy())
+
+    # Process each day
+    for day, appointments in appointments_by_day.items():
+        # Get street and non-street sessions
+        street_sessions = [appt for appt in appointments if appt['type'] in ['streets', 'trial_streets']]
+        non_street_sessions = [appt for appt in appointments if appt['type'] not in ['streets', 'trial_streets']]
+
+        # Only proceed if there are at least 2 street sessions
+        if len(street_sessions) >= 2:
+            # Sort street sessions by start time
+            street_sessions.sort(key=lambda x: x['start_time'])
+
+            # Keep the first session fixed, move others to be consecutive
+            first_session = street_sessions[0]
+            current_end = time_to_minutes(first_session['end_time'])
+
+            # Compact all remaining street sessions with minimum gap first
+            for i in range(1, len(street_sessions)):
+                # Try to set next session to start with minimum gap
+                new_start = current_end + min_street_gap
+                new_end = new_start + street_sessions[i]['duration']
+
+                # Check if this placement conflicts with any zoom session
+                conflict = False
+                for zoom in non_street_sessions:
+                    if zoom['type'] in ['zoom', 'trial_zoom']:
+                        zoom_start = time_to_minutes(zoom['start_time'])
+                        zoom_end = time_to_minutes(zoom['end_time'])
+
+                        # Case 1: Street would end too close to zoom start (need 75 min gap)
+                        if new_end + 75 > zoom_start and new_start < zoom_start:
+                            conflict = True
+                            break
+
+                        # Case 2: Street would start too soon after zoom end (need 75 min gap)
+                        if new_start < zoom_end + 75 and new_end > zoom_end:
+                            conflict = True
+                            break
+
+                        # Case 3: Street would overlap with zoom
+                        if new_start < zoom_end and new_end > zoom_start:
+                            conflict = True
+                            break
+
+                # If conflict with min gap, try with max gap instead
+                if conflict:
+                    new_start = current_end + max_street_gap
+                    new_end = new_start + street_sessions[i]['duration']
+
+                    # Check again for conflicts with max gap
+                    max_gap_conflict = False
+                    for zoom in non_street_sessions:
+                        if zoom['type'] in ['zoom', 'trial_zoom']:
+                            zoom_start = time_to_minutes(zoom['start_time'])
+                            zoom_end = time_to_minutes(zoom['end_time'])
+
+                            # Same conflict checks as before
+                            if (new_end + 75 > zoom_start and new_start < zoom_start) or \
+                                    (new_start < zoom_end + 75 and new_end > zoom_end) or \
+                                    (new_start < zoom_end and new_end > zoom_start):
+                                max_gap_conflict = True
+                                break
+
+                    # If still conflict, we'll place it after all conflicts
+                    if max_gap_conflict:
+                        # Find earliest time after all conflicts
+                        earliest_safe_time = current_end + max_street_gap
+                        for zoom in non_street_sessions:
+                            if zoom['type'] in ['zoom', 'trial_zoom']:
+                                zoom_end = time_to_minutes(zoom['end_time'])
+                                if zoom_end + 75 > earliest_safe_time:
+                                    earliest_safe_time = zoom_end + 75
+
+                        new_start = earliest_safe_time
+                        new_end = new_start + street_sessions[i]['duration']
+
+                # Update the session times
+                street_sessions[i]['start_time'] = minutes_to_time(new_start)
+                street_sessions[i]['end_time'] = minutes_to_time(new_end)
+
+                # Update current end time for next iteration
+                current_end = new_end
+
+            # Combine the lists and resort
+            appointments = non_street_sessions + street_sessions
+            appointments.sort(key=lambda x: x['start_time'])
+
+            # Now check for any remaining conflicts
+            i = 0
+            while i < len(appointments) - 1:
+                current = appointments[i]
+                next_appt = appointments[i + 1]
+
+                current_end = time_to_minutes(current['end_time'])
+                next_start = time_to_minutes(next_appt['start_time'])
+
+                # Determine required gap based on session types
+                required_gap = 15  # Default minimum gap
+                if ((current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']) or
+                        (current['type'] in ['zoom', 'trial_zoom'] and next_appt['type'] in ['streets',
+                                                                                             'trial_streets'])):
+                    required_gap = 75  # Zoom-streets transition
+
+                # If sessions overlap or don't have enough gap, move the second one
+                if next_start < current_end + required_gap:
+                    new_start = current_end + required_gap
+                    new_end = new_start + next_appt['duration']
+
+                    next_appt['start_time'] = minutes_to_time(new_start)
+                    next_appt['end_time'] = minutes_to_time(new_end)
+
+                    # Need to recheck from this position since we modified the schedule
+                    i = 0
+                    # Resort appointments
+                    appointments.sort(key=lambda x: x['start_time'])
+                    continue
+
+                i += 1
+
+            # One final check specifically for street-to-street gaps
+            for i in range(len(appointments) - 1):
+                current = appointments[i]
+                next_appt = appointments[i + 1]
+
+                # Only check consecutive street sessions
+                if current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['streets',
+                                                                                             'trial_streets']:
+                    current_end = time_to_minutes(current['end_time'])
+                    next_start = time_to_minutes(next_appt['start_time'])
+                    gap = next_start - current_end
+
+                    # If gap is too large, try to minimize it
+                    if gap > max_street_gap:
+                        # Move next session earlier
+                        new_start = current_end + min_street_gap
+                        new_end = new_start + next_appt['duration']
+
+                        # Check if moving it would create conflicts
+                        conflict = False
+                        for k in range(len(appointments)):
+                            if k == i or k == i + 1:  # Skip the sessions we're adjusting
+                                continue
+
+                            other = appointments[k]
+                            other_start = time_to_minutes(other['start_time'])
+                            other_end = time_to_minutes(other['end_time'])
+
+                            # Check for overlap or insufficient gap
+                            min_gap = 75 if (other['type'] in ['zoom', 'trial_zoom'] or
+                                             next_appt['type'] in ['zoom', 'trial_zoom']) else 15
+
+                            if (new_start < other_end + min_gap and new_end + min_gap > other_start):
+                                conflict = True
+                                break
+
+                        # If no conflict, apply the new time
+                        if not conflict:
+                            next_appt['start_time'] = minutes_to_time(new_start)
+                            next_appt['end_time'] = minutes_to_time(new_end)
+
+            # Final sort after all adjustments
+            appointments.sort(key=lambda x: x['start_time'])
+            appointments_by_day[day] = appointments
+
+    # Reconstruct the schedule
+    updated_appointments = []
+    for day_appointments in appointments_by_day.values():
+        updated_appointments.extend(day_appointments)
+
+    # Final sort
+    updated_appointments.sort(key=lambda x: (x['date'], x['start_time']))
+    return updated_appointments
+
+
 def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_day=270):
     """Schedule appointments based on constraints and client availability.
 
@@ -362,7 +556,7 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         model.AddBoolAnd([lit.Not() for lit in availability_literals]).OnlyEnforceIf(
             appointment_scheduled_vars[client_id].Not())
 
-    # Create arrays to track street sessions per day
+    # For each day, track street sessions and enforce the 0 or at least 2 constraint
     days_with_streets = {}
     street_sessions_per_day = {}
     street_minutes_per_day = {}  # Track total minutes of street sessions per day
@@ -412,13 +606,19 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
             model.Add(street_minutes_per_day[day] <= max_street_minutes_per_day)
 
             # Variable to indicate if this day has at least 2 street sessions
-            days_with_streets[day] = model.NewBoolVar(f'day_{day}_has_streets')
-            model.Add(street_sessions_per_day[day] >= 2).OnlyEnforceIf(days_with_streets[day])
-            model.Add(street_sessions_per_day[day] <= 1).OnlyEnforceIf(days_with_streets[day].Not())
+            has_at_least_2 = model.NewBoolVar(f'has_at_least_2_day_{day}')
+            model.Add(street_sessions_per_day[day] >= 2).OnlyEnforceIf(has_at_least_2)
+            model.Add(street_sessions_per_day[day] < 2).OnlyEnforceIf(has_at_least_2.Not())
 
-            # Enforce the rule: either 0 or at least 2 streets sessions per day
-            model.Add(street_sessions_per_day[day] == 0).OnlyEnforceIf(days_with_streets[day].Not())
+            # Variable to indicate if this day has exactly 0 street sessions
+            has_exactly_0 = model.NewBoolVar(f'has_exactly_0_day_{day}')
+            model.Add(street_sessions_per_day[day] == 0).OnlyEnforceIf(has_exactly_0)
+            model.Add(street_sessions_per_day[day] != 0).OnlyEnforceIf(has_exactly_0.Not())
 
+            # Either has at least 2 or exactly 0 street sessions
+            model.AddBoolOr([has_at_least_2, has_exactly_0])
+
+            # For each day, if there are 2 or more street sessions, enforce the max gap constraint
             if len(street_sessions_by_day[day]) >= 2:
                 # Create a variable for each session to represent its position in the sequence
                 session_positions = {}
@@ -595,25 +795,46 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         # Prioritize client by priority value and add a small weight for lower client IDs
         # This ensures deterministic behavior when clients have identical constraints
         client_id_int = int(client_id) if client_id.isdigit() else 0
+        # Priority objective term
         objective_terms.append(appointment_scheduled_vars[client_id] * priority * 100)  # Weight by priority
-        objective_terms.append(
-            appointment_scheduled_vars[client_id] * (-client_id_int * 0.1))  # Small preference for lower client IDs
+        # Small preference for lower client IDs for deterministic behavior
+        objective_terms.append(appointment_scheduled_vars[client_id] * (-client_id_int * 0.1))
 
-    # Maximize the number of days with at least 2 street sessions
-    for day in days_with_streets:
-        objective_terms.append(days_with_streets[day] * 1000)  # High weight to prioritize days with streets
+        # Prioritize days with at least 2 street sessions
+    for day in range(7):
+        if day == 6:  # Skip Saturday
+            continue
+        if day in street_sessions_per_day:
+            # Add bonus for days with exactly 0 or at least 2 street sessions
+            has_at_least_2 = model.NewBoolVar(f'opt_day_{day}_has_at_least_2')
+            model.Add(street_sessions_per_day[day] >= 2).OnlyEnforceIf(has_at_least_2)
+            model.Add(street_sessions_per_day[day] < 2).OnlyEnforceIf(has_at_least_2.Not())
 
-    # Maximize the number of street sessions per day (up to 4)
+            has_exactly_0 = model.NewBoolVar(f'opt_day_{day}_has_exactly_0')
+            model.Add(street_sessions_per_day[day] == 0).OnlyEnforceIf(has_exactly_0)
+            model.Add(street_sessions_per_day[day] != 0).OnlyEnforceIf(has_exactly_0.Not())
+
+            # Heavily penalize having exactly 1 street session
+            has_exactly_1 = model.NewBoolVar(f'opt_day_{day}_has_exactly_1')
+            model.Add(street_sessions_per_day[day] == 1).OnlyEnforceIf(has_exactly_1)
+            model.Add(street_sessions_per_day[day] != 1).OnlyEnforceIf(has_exactly_1.Not())
+
+            # Add high weight to prioritize valid configurations
+            objective_terms.append(has_at_least_2 * 2000)  # Best case - at least 2 sessions
+            objective_terms.append(has_exactly_0 * 1000)  # Second best - exactly 0 sessions
+            objective_terms.append(has_exactly_1 * (-5000))  # Heavily penalize having exactly 1 session
+
+        # Maximize the number of street sessions per day (up to 4)
     for day in street_sessions_per_day:
         sessions_count = street_sessions_per_day[day]
         # Add bonus for each street session (diminishing returns after 4)
-        for i in range(1, 5):
+        for i in range(2, 5):  # Start at 2 to encourage at least 2 sessions
             has_at_least_i = model.NewBoolVar(f'day_{day}_has_at_least_{i}')
             model.Add(sessions_count >= i).OnlyEnforceIf(has_at_least_i)
             model.Add(sessions_count < i).OnlyEnforceIf(has_at_least_i.Not())
 
             # Weight decreases as we get more sessions
-            weight = 500 if i <= 2 else 300 if i <= 3 else 200
+            weight = 300 if i <= 3 else 200
             objective_terms.append(has_at_least_i * weight)
 
     model.Maximize(sum(objective_terms))
@@ -653,10 +874,17 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
                     'duration': client['duration']
                 })
 
-        scheduled_appointments = minimize_gaps_post_processing(scheduled_appointments)
+        # Apply strict enforcement of street session consecutiveness
+        scheduled_appointments = enforce_consecutive_street_sessions(scheduled_appointments)
+
+        # Then apply zoom-street gaps as well
+        scheduled_appointments = enforce_zoom_street_gaps(scheduled_appointments)
 
         # Sort appointments by date and time
         scheduled_appointments.sort(key=lambda x: (x['date'], x['start_time']))
+
+        # Verify constraints after scheduling
+        validate_schedule(scheduled_appointments, max_street_gap)
 
         # Print summary statistics
         total_scheduled = len(scheduled_appointments)
@@ -743,83 +971,13 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         return [], client_availabilities
 
 
-def enforce_street_zoom_gaps(appointments, streets_zoom_break=75):
-    """Enforces the 75-minute gap constraint between street and zoom sessions.
+def validate_schedule(scheduled_appointments, min_street_gap=15, max_street_gap=30):
+    """Validate the schedule against all constraints.
 
     Args:
-        appointments: List of appointments for a single day, sorted by start time
-        streets_zoom_break: Minimum break required between street and zoom sessions
-
-    Returns:
-        Updated list of appointments with correct gaps
-    """
-    if len(appointments) <= 1:
-        return appointments
-
-    # Create a copy to avoid modifying the original
-    appointments = [appointment.copy() for appointment in appointments]
-
-    # Sort by start time to ensure proper order
-    appointments.sort(key=lambda x: x['start_time'])
-
-    # Check for violations of the constraint (street followed by zoom with gap < 75 minutes)
-    for i in range(len(appointments) - 1):
-        current = appointments[i]
-        next_appt = appointments[i + 1]
-
-        # Check if this is a street-to-zoom transition
-        if current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']:
-            current_end_minutes = time_to_minutes(current['end_time'])
-            next_start_minutes = time_to_minutes(next_appt['start_time'])
-
-            # Calculate the gap
-            gap = next_start_minutes - current_end_minutes
-
-            # If gap is less than required, adjust the next appointment
-            if gap < streets_zoom_break:
-                # Move the zoom session to start 75 minutes after the street session ends
-                new_start_minutes = current_end_minutes + streets_zoom_break
-                new_end_minutes = new_start_minutes + next_appt['duration']
-
-                next_appt['start_time'] = minutes_to_time(new_start_minutes)
-                next_appt['end_time'] = minutes_to_time(new_end_minutes)
-
-                # Now we need to check and fix any overlaps created by this adjustment
-                for j in range(i + 1, len(appointments) - 1):
-                    current_j = appointments[j]
-                    next_j = appointments[j + 1]
-
-                    current_j_end = time_to_minutes(current_j['end_time'])
-                    next_j_start = time_to_minutes(next_j['start_time'])
-
-                    required_gap = streets_zoom_break if (current_j['type'] in ['streets', 'trial_streets'] and
-                                                          next_j['type'] in ['zoom', 'trial_zoom']) else required_break
-
-                    # If there's an overlap or insufficient gap
-                    if next_j_start < current_j_end + required_gap:
-                        # Adjust the next appointment
-                        new_next_start = current_j_end + required_gap
-                        new_next_end = new_next_start + next_j['duration']
-
-                        next_j['start_time'] = minutes_to_time(new_next_start)
-                        next_j['end_time'] = minutes_to_time(new_next_end)
-
-    # Re-sort by start time in case any adjustments changed the order
-    appointments.sort(key=lambda x: x['start_time'])
-
-    return appointments
-
-
-def minimize_gaps_post_processing(scheduled_appointments, required_break=15, streets_zoom_break=75):
-    """Post-processes the schedule to minimize gaps between street sessions while maintaining constraints.
-
-    Args:
-        scheduled_appointments: List of scheduled appointment dictionaries
-        required_break: Minimum break between any two sessions (default: 15 minutes)
-        streets_zoom_break: Minimum break between street and zoom sessions (default: 75 minutes)
-
-    Returns:
-        List of appointments with minimized gaps between street sessions
+        scheduled_appointments: List of scheduled appointments
+        min_street_gap: Minimum preferred gap between street sessions (default: 15)
+        max_street_gap: Maximum allowed gap between street sessions (default: 30)
     """
     # Group appointments by day
     appointments_by_day = {}
@@ -829,137 +987,92 @@ def minimize_gaps_post_processing(scheduled_appointments, required_break=15, str
             appointments_by_day[day] = []
         appointments_by_day[day].append(appt)
 
+    # Check for constraint violations
+    for day, appointments in appointments_by_day.items():
+        # Check "0 or at least 2 street sessions per day" constraint
+        street_sessions = [appt for appt in appointments if appt['type'] in ['streets', 'trial_streets']]
+        if len(street_sessions) == 1:
+            print(f"WARNING: Day {day} has exactly 1 street session (client {street_sessions[0]['client_id']})")
+
+        # Check "maximum 30-minute gap between street sessions" constraint
+        if len(street_sessions) >= 2:
+            street_sessions.sort(key=lambda x: x['start_time'])
+            for i in range(len(street_sessions) - 1):
+                current = street_sessions[i]
+                next_session = street_sessions[i + 1]
+
+                current_end = time_to_minutes(current['end_time'])
+                next_start = time_to_minutes(next_session['start_time'])
+
+                gap = next_start - current_end
+
+                if gap > max_street_gap:
+                    print(f"WARNING: Gap of {gap} minutes between street sessions on {day}: " +
+                          f"{current['client_id']} and {next_session['client_id']}")
+                elif gap < min_street_gap:
+                    print(f"WARNING: Gap of {gap} minutes between street sessions on {day} is less than " +
+                          f"minimum preferred gap of {min_street_gap} minutes: " +
+                          f"{current['client_id']} and {next_session['client_id']}")
+
+
+def enforce_zoom_street_gaps(scheduled_appointments, streets_zoom_break=75):
+    """
+    Post-process to enforce the 75-minute gap between zoom and street sessions.
+    This simpler version only focuses on this constraint and doesn't modify other aspects.
+
+    Args:
+        scheduled_appointments: List of scheduled appointment dictionaries
+        streets_zoom_break: Minimum break required between street and zoom sessions
+
+    Returns:
+        Updated list of appointments with zoom-street gaps enforced
+    """
+    # Group appointments by day
+    appointments_by_day = {}
+    for appt in scheduled_appointments:
+        day = appt['date']
+        if day not in appointments_by_day:
+            appointments_by_day[day] = []
+        appointments_by_day[day].append(appt.copy())
+
     # Process each day
     for day, appointments in appointments_by_day.items():
-        # Sort by start time
         appointments.sort(key=lambda x: x['start_time'])
 
-        # First, verify and fix gaps between street-to-zoom transitions
-        # This needs to be done before compacting street sessions to ensure the 75-minute gap is maintained
-        appointments = enforce_street_zoom_gaps(appointments, required_break, streets_zoom_break)
+        # Enforce minimum gap between all sessions, with special handling for zoom-street transitions
+        for i in range(len(appointments) - 1):
+            current = appointments[i]
+            next_appt = appointments[i + 1]
 
-        # After fixing gaps, identify street and non-street sessions
-        street_sessions = [appt for appt in appointments if appt['type'] in ['streets', 'trial_streets']]
-        non_street_sessions = [appt for appt in appointments if appt['type'] not in ['streets', 'trial_streets']]
+            current_end = time_to_minutes(current['end_time'])
+            next_start = time_to_minutes(next_appt['start_time'])
 
-        # Only proceed with compacting if there are at least 2 street sessions
-        if len(street_sessions) >= 2:
-            # Sort street sessions by start time
-            street_sessions.sort(key=lambda x: x['start_time'])
+            required_gap = 15  # Default minimum gap
 
-            # Create a timeline of fixed points from non-street sessions
-            fixed_points = []
-            for appt in non_street_sessions:
-                start_minutes = time_to_minutes(appt['start_time'])
-                end_minutes = time_to_minutes(appt['end_time'])
-                session_type = appt['type']
+            # Check if this is a street-zoom or zoom-street transition
+            if ((current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']) or
+                    (current['type'] in ['zoom', 'trial_zoom'] and next_appt['type'] in ['streets', 'trial_streets'])):
+                required_gap = streets_zoom_break
 
-                # Add constraints for zoom sessions
-                if session_type in ['zoom', 'trial_zoom']:
-                    # Streets must end at least 75 minutes before zoom starts
-                    fixed_points.append({
-                        'time': start_minutes - streets_zoom_break,
-                        'type': 'before_zoom'
-                    })
-                    # Streets can start at least 75 minutes after zoom ends
-                    fixed_points.append({
-                        'time': end_minutes + streets_zoom_break,
-                        'type': 'after_zoom'
-                    })
+            # If gap is insufficient, move the next appointment
+            if next_start - current_end < required_gap:
+                new_start = current_end + required_gap
+                new_end = new_start + next_appt['duration']
 
-            # Sort fixed points by time
-            fixed_points.sort(key=lambda x: x['time'])
+                next_appt['start_time'] = minutes_to_time(new_start)
+                next_appt['end_time'] = minutes_to_time(new_end)
 
-            # Compact the street sessions while respecting fixed points
-            compact_street_sessions(street_sessions, fixed_points, required_break)
+        # Re-sort after adjustments
+        appointments.sort(key=lambda x: x['start_time'])
 
-            # Update the appointments list
-            all_sessions = non_street_sessions + street_sessions
-            all_sessions.sort(key=lambda x: x['start_time'])
-
-            # Verify once more that all constraints are maintained
-            all_sessions = enforce_street_zoom_gaps(all_sessions, required_break, streets_zoom_break)
-
-            # Replace the day's appointments with the updated list
-            appointments_by_day[day] = all_sessions
-
-    # Reconstruct the full schedule
+    # Reconstruct the schedule
     updated_appointments = []
     for day_appointments in appointments_by_day.values():
         updated_appointments.extend(day_appointments)
 
     # Sort by date and time
     updated_appointments.sort(key=lambda x: (x['date'], x['start_time']))
-
     return updated_appointments
-
-
-def enforce_street_zoom_gaps(appointments, required_break=15, streets_zoom_break=75):
-    """Enforces the 75-minute gap constraint between street and zoom sessions.
-
-    Args:
-        appointments: List of appointments for a single day, sorted by start time
-        required_break: Minimum break between any two sessions (default: 15 minutes)
-        streets_zoom_break: Minimum break required between street and zoom sessions
-
-    Returns:
-        Updated list of appointments with correct gaps
-    """
-    if len(appointments) <= 1:
-        return appointments
-
-    # Create a copy to avoid modifying the original
-    appointments = [appointment.copy() for appointment in appointments]
-
-    # Sort by start time to ensure proper order
-    appointments.sort(key=lambda x: x['start_time'])
-
-    # Check for violations of the constraint (street followed by zoom with gap < 75 minutes)
-    for i in range(len(appointments) - 1):
-        current = appointments[i]
-        next_appt = appointments[i + 1]
-
-        # Check if this is a street-to-zoom transition
-        if current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']:
-            current_end_minutes = time_to_minutes(current['end_time'])
-            next_start_minutes = time_to_minutes(next_appt['start_time'])
-
-            # Calculate the gap
-            gap = next_start_minutes - current_end_minutes
-
-            # If gap is less than required, adjust the next appointment
-            if gap < streets_zoom_break:
-                # Move the zoom session to start 75 minutes after the street session ends
-                new_start_minutes = current_end_minutes + streets_zoom_break
-                new_end_minutes = new_start_minutes + next_appt['duration']
-
-                next_appt['start_time'] = minutes_to_time(new_start_minutes)
-                next_appt['end_time'] = minutes_to_time(new_end_minutes)
-
-                # Now we need to check and fix any overlaps created by this adjustment
-                for j in range(i + 1, len(appointments) - 1):
-                    current_j = appointments[j]
-                    next_j = appointments[j + 1]
-
-                    current_j_end = time_to_minutes(current_j['end_time'])
-                    next_j_start = time_to_minutes(next_j['start_time'])
-
-                    required_gap = streets_zoom_break if (current_j['type'] in ['streets', 'trial_streets'] and
-                                                          next_j['type'] in ['zoom', 'trial_zoom']) else required_break
-
-                    # If there's an overlap or insufficient gap
-                    if next_j_start < current_j_end + required_gap:
-                        # Adjust the next appointment
-                        new_next_start = current_j_end + required_gap
-                        new_next_end = new_next_start + next_j['duration']
-
-                        next_j['start_time'] = minutes_to_time(new_next_start)
-                        next_j['end_time'] = minutes_to_time(new_next_end)
-
-    # Re-sort by start time in case any adjustments changed the order
-    appointments.sort(key=lambda x: x['start_time'])
-
-    return appointments
 
 
 def time_to_minutes(time_str):
@@ -973,44 +1086,6 @@ def minutes_to_time(minutes):
     hours = minutes // 60
     mins = minutes % 60
     return f"{hours:02d}:{mins:02d}"
-
-
-def compact_street_sessions(street_sessions, fixed_points, required_break):
-    """Compact street sessions to minimize gaps while respecting fixed points."""
-    # If no street sessions, nothing to do
-    if not street_sessions:
-        return
-
-    # Get the earliest possible start time (considering first fixed point)
-    # By default, start at the original start time of the first session
-    current_time = time_to_minutes(street_sessions[0]['start_time'])
-
-    # Check if there are fixed points before the first session
-    relevant_fixed_points = [fp for fp in fixed_points if fp['time'] < current_time]
-    if relevant_fixed_points:
-        # Start after the last fixed point before the original start time
-        current_time = max(current_time, relevant_fixed_points[-1]['time'])
-
-    # Process each street session
-    for i, session in enumerate(street_sessions):
-        session_duration = session['duration']
-
-        # Check if we need to delay this session due to a fixed point
-        for fixed_point in fixed_points:
-            if current_time < fixed_point['time'] < current_time + session_duration:
-                # Need to start after this fixed point
-                current_time = fixed_point['time']
-
-        # Update the session's start and end times
-        new_start = current_time
-        new_end = new_start + session_duration
-
-        # Update the session times
-        session['start_time'] = minutes_to_time(new_start)
-        session['end_time'] = minutes_to_time(new_end)
-
-        # Update current time for the next session
-        current_time = new_end + required_break
 
 
 def export_schedule_to_json(scheduled_appointments, output_file):
@@ -1059,18 +1134,6 @@ def export_enhanced_schedule_to_json(scheduled_appointments, client_availabiliti
     # Get unscheduled client IDs
     unscheduled_client_ids = all_client_ids - scheduled_client_ids
 
-    # Optionally, you could populate unfilled_appointments with info about unscheduled clients
-    # Uncomment the following code if you want to include unscheduled clients
-    """
-    for client_id in unscheduled_client_ids:
-        client_data = next((c for c in client_availabilities if c['id'] == client_id), None)
-        if client_data:
-            unfilled_appointments.append({
-                "id": client_id,
-                "type": client_data['type']
-            })
-    """
-
     # Count sessions by type
     session_types = ['streets', 'trial_streets', 'zoom', 'trial_zoom', 'field']
     type_counts = {
@@ -1102,7 +1165,7 @@ def export_enhanced_schedule_to_json(scheduled_appointments, client_availabiliti
         else:
             type_counts[session_type]['rate'] = 1.0  # If total is 0, set rate to 1.0
 
-    # Build the validation section (simplified for now)
+    # Build the validation section
     validation = {
         "valid": True,
         "issues": []
@@ -1197,172 +1260,172 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
 
     # Create the HTML content
     html_content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Schedule Report</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 20px;
-            }}
-            h1, h2, h3 {{
-                color: #2c3e50;
-            }}
-            .header {{
-                border-bottom: 2px solid #3498db;
-                margin-bottom: 20px;
-                padding-bottom: 10px;
-            }}
-            .summary {{
-                background-color: #f8f9fa;
-                border-radius: 5px;
-                padding: 15px;
-                margin-bottom: 20px;
-                display: flex;
-                flex-wrap: wrap;
-                justify-content: space-between;
-            }}
-            .summary-box {{
-                background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 10px;
-                margin: 5px;
-                flex: 1;
-                min-width: 200px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }}
-            .day-schedule {{
-                margin-bottom: 30px;
-            }}
-            .day-header {{
-                background-color: #3498db;
-                color: white;
-                padding: 10px;
-                border-radius: 5px 5px 0 0;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 20px;
-            }}
-            th, td {{
-                padding: 12px 15px;
-                text-align: left;
-                border-bottom: 1px solid #ddd;
-            }}
-            th {{
-                background-color: #f2f2f2;
-            }}
-            tr:hover {{
-                background-color: #f5f5f5;
-            }}
-            .streets {{
-                background-color: #d4edda;
-            }}
-            .trial_streets {{
-                background-color: #c3e6cb;
-            }}
-            .zoom {{
-                background-color: #d1ecf1;
-            }}
-            .trial_zoom {{
-                background-color: #bee5eb;
-            }}
-            .unscheduled {{
-                background-color: #f8d7da;
-                margin-top: 30px;
-                border-radius: 5px;
-                padding: 15px;
-            }}
-            .progress {{
-                height: 20px;
-                width: 100%;
-                background-color: #e9ecef;
-                border-radius: 20px;
-                position: relative;
-                margin-top: 5px;
-            }}
-            .progress-bar {{
-                height: 100%;
-                border-radius: 20px;
-                background-color: #3498db;
-                text-align: center;
-                color: white;
-                line-height: 20px;
-                font-size: 12px;
-            }}
-            .good {{
-                background-color: #28a745;
-            }}
-            .medium {{
-                background-color: #ffc107;
-            }}
-            .poor {{
-                background-color: #dc3545;
-            }}
-            .badge {{
-                display: inline-block;
-                padding: 3px 7px;
-                font-size: 12px;
-                font-weight: bold;
-                line-height: 1;
-                text-align: center;
-                white-space: nowrap;
-                vertical-align: baseline;
-                border-radius: 10px;
-                color: white;
-            }}
-            .badge-streets {{
-                background-color: #28a745;
-            }}
-            .badge-trial_streets {{
-                background-color: #20c997;
-            }}
-            .badge-zoom {{
-                background-color: #17a2b8;
-            }}
-            .badge-trial_zoom {{
-                background-color: #0dcaf0;
-            }}
-            .empty-message {{
-                text-align: center;
-                padding: 20px;
-                color: #6c757d;
-            }}
-            footer {{
-                margin-top: 50px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-                text-align: center;
-                font-size: 14px;
-                color: #6c757d;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>Appointment Schedule Report</h1>
-            <p>Scheduling period starting: {start_date.strftime('%Y-%m-%d')}</p>
-            <p>Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
-        </div>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Schedule Report</title>
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        max-width: 1200px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }}
+                    h1, h2, h3 {{
+                        color: #2c3e50;
+                    }}
+                    .header {{
+                        border-bottom: 2px solid #3498db;
+                        margin-bottom: 20px;
+                        padding-bottom: 10px;
+                    }}
+                    .summary {{
+                        background-color: #f8f9fa;
+                        border-radius: 5px;
+                        padding: 15px;
+                        margin-bottom: 20px;
+                        display: flex;
+                        flex-wrap: wrap;
+                        justify-content: space-between;
+                    }}
+                    .summary-box {{
+                        background-color: white;
+                        border: 1px solid #ddd;
+                        border-radius: 4px;
+                        padding: 10px;
+                        margin: 5px;
+                        flex: 1;
+                        min-width: 200px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    }}
+                    .day-schedule {{
+                        margin-bottom: 30px;
+                    }}
+                    .day-header {{
+                        background-color: #3498db;
+                        color: white;
+                        padding: 10px;
+                        border-radius: 5px 5px 0 0;
+                    }}
+                    table {{
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 20px;
+                    }}
+                    th, td {{
+                        padding: 12px 15px;
+                        text-align: left;
+                        border-bottom: 1px solid #ddd;
+                    }}
+                    th {{
+                        background-color: #f2f2f2;
+                    }}
+                    tr:hover {{
+                        background-color: #f5f5f5;
+                    }}
+                    .streets {{
+                        background-color: #d4edda;
+                    }}
+                    .trial_streets {{
+                        background-color: #c3e6cb;
+                    }}
+                    .zoom {{
+                        background-color: #d1ecf1;
+                    }}
+                    .trial_zoom {{
+                        background-color: #bee5eb;
+                    }}
+                    .unscheduled {{
+                        background-color: #f8d7da;
+                        margin-top: 30px;
+                        border-radius: 5px;
+                        padding: 15px;
+                    }}
+                    .progress {{
+                        height: 20px;
+                        width: 100%;
+                        background-color: #e9ecef;
+                        border-radius: 20px;
+                        position: relative;
+                        margin-top: 5px;
+                    }}
+                    .progress-bar {{
+                        height: 100%;
+                        border-radius: 20px;
+                        background-color: #3498db;
+                        text-align: center;
+                        color: white;
+                        line-height: 20px;
+                        font-size: 12px;
+                    }}
+                    .good {{
+                        background-color: #28a745;
+                    }}
+                    .medium {{
+                        background-color: #ffc107;
+                    }}
+                    .poor {{
+                        background-color: #dc3545;
+                    }}
+                    .badge {{
+                        display: inline-block;
+                        padding: 3px 7px;
+                        font-size: 12px;
+                        font-weight: bold;
+                        line-height: 1;
+                        text-align: center;
+                        white-space: nowrap;
+                        vertical-align: baseline;
+                        border-radius: 10px;
+                        color: white;
+                    }}
+                    .badge-streets {{
+                        background-color: #28a745;
+                    }}
+                    .badge-trial_streets {{
+                        background-color: #20c997;
+                    }}
+                    .badge-zoom {{
+                        background-color: #17a2b8;
+                    }}
+                    .badge-trial_zoom {{
+                        background-color: #0dcaf0;
+                    }}
+                    .empty-message {{
+                        text-align: center;
+                        padding: 20px;
+                        color: #6c757d;
+                    }}
+                    footer {{
+                        margin-top: 50px;
+                        padding-top: 20px;
+                        border-top: 1px solid #ddd;
+                        text-align: center;
+                        font-size: 14px;
+                        color: #6c757d;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>Appointment Schedule Report</h1>
+                    <p>Scheduling period starting: {start_date.strftime('%Y-%m-%d')}</p>
+                    <p>Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+                </div>
 
-        <div class="summary">
-            <div class="summary-box">
-                <h3>Schedule Overview</h3>
-                <p>Total appointments: {len(client_availabilities)}</p>
-                <p>Scheduled: {len(scheduled_appointments)} 
-                ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
-                <p>Unscheduled: {len(unscheduled_clients)}</p>
-            </div>
-    """
+                <div class="summary">
+                    <div class="summary-box">
+                        <h3>Schedule Overview</h3>
+                        <p>Total appointments: {len(client_availabilities)}</p>
+                        <p>Scheduled: {len(scheduled_appointments)} 
+                        ({round(len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)}%)</p>
+                        <p>Unscheduled: {len(unscheduled_clients)}</p>
+                    </div>
+            """
 
     # Add session type statistics
     for session_type in ['streets', 'trial_streets', 'zoom', 'trial_zoom']:
@@ -1378,112 +1441,112 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             display_type = " ".join(word.capitalize() for word in session_type.split("_"))
 
             html_content += f"""
-            <div class="summary-box">
-                <h3>{display_type}</h3>
-                <p>Scheduled: {scheduled} / {total}</p>
-                <div class="progress">
-                    <div class="progress-bar {color_class}" style="width: {rate}%">{rate}%</div>
-                </div>
-            </div>
-            """
+                    <div class="summary-box">
+                        <h3>{display_type}</h3>
+                        <p>Scheduled: {scheduled} / {total}</p>
+                        <div class="progress">
+                            <div class="progress-bar {color_class}" style="width: {rate}%">{rate}%</div>
+                        </div>
+                    </div>
+                    """
 
     html_content += """
-        </div>
-    """
+                </div>
+            """
 
     # Daily schedule
     if appointments_by_day:
         html_content += """
-        <h2>Daily Schedule</h2>
-        """
+                <h2>Daily Schedule</h2>
+                """
 
         # Sort days
         for day, appointments in sorted(appointments_by_day.items()):
             day_name = appointments[0]['day']
             html_content += f"""
-            <div class="day-schedule">
-                <div class="day-header">
-                    <h3>{day_name} ({day})</h3>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                            <th>Client ID</th>
-                            <th>Session Type</th>
-                            <th>Duration</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """
+                    <div class="day-schedule">
+                        <div class="day-header">
+                            <h3>{day_name} ({day})</h3>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Start Time</th>
+                                    <th>End Time</th>
+                                    <th>Client ID</th>
+                                    <th>Session Type</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    """
 
             # Sort appointments by start time
             for appt in sorted(appointments, key=lambda x: x['start_time']):
                 session_type = appt['type']
                 html_content += f"""
-                        <tr class="{session_type}">
-                            <td>{appt['start_time']}</td>
-                            <td>{appt['end_time']}</td>
-                            <td>{appt['client_id']}</td>
-                            <td><span class="badge badge-{session_type}">{session_type}</span></td>
-                            <td>{appt['duration']} min</td>
-                        </tr>
-                """
+                                <tr class="{session_type}">
+                                    <td>{appt['start_time']}</td>
+                                    <td>{appt['end_time']}</td>
+                                    <td>{appt['client_id']}</td>
+                                    <td><span class="badge badge-{session_type}">{session_type}</span></td>
+                                    <td>{appt['duration']} min</td>
+                                </tr>
+                        """
 
             html_content += """
-                    </tbody>
-                </table>
-            </div>
-            """
+                            </tbody>
+                        </table>
+                    </div>
+                    """
     else:
         html_content += """
-        <div class="empty-message">
-            <h2>No appointments scheduled</h2>
-            <p>The scheduler was unable to find a valid solution for the given constraints.</p>
-        </div>
-        """
+                <div class="empty-message">
+                    <h2>No appointments scheduled</h2>
+                    <p>The scheduler was unable to find a valid solution for the given constraints.</p>
+                </div>
+                """
 
     # Unscheduled clients
     if unscheduled_clients:
         html_content += """
-        <div class="unscheduled">
-            <h2>Unscheduled Appointments</h2>
-            <p>The following appointments could not be scheduled:</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Client ID</th>
-                        <th>Session Type</th>
-                        <th>Priority</th>
-                    </tr>
-                </thead>
-                <tbody>
-        """
+                <div class="unscheduled">
+                    <h2>Unscheduled Appointments</h2>
+                    <p>The following appointments could not be scheduled:</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Client ID</th>
+                                <th>Session Type</th>
+                                <th>Priority</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                """
 
         for client in sorted(unscheduled_clients, key=lambda x: x['id']):
             html_content += f"""
-                    <tr>
-                        <td>{client['id']}</td>
-                        <td><span class="badge badge-{client['type']}">{client['type']}</span></td>
-                        <td>{client['priority']}</td>
-                    </tr>
-            """
+                            <tr>
+                                <td>{client['id']}</td>
+                                <td><span class="badge badge-{client['type']}">{client['type']}</span></td>
+                                <td>{client['priority']}</td>
+                            </tr>
+                    """
 
         html_content += """
-                </tbody>
-            </table>
-        </div>
-        """
+                        </tbody>
+                    </table>
+                </div>
+                """
 
     # Footer
     html_content += """
-        <footer>
-            <p>Generated by Appointment Scheduler</p>
-        </footer>
-    </body>
-    </html>
-    """
+                <footer>
+                    <p>Generated by Appointment Scheduler</p>
+                </footer>
+            </body>
+            </html>
+            """
 
     # Write to file
     with open(output_file, 'w') as f:
@@ -1499,6 +1562,8 @@ def main():
     parser.add_argument('--html', type=str, default='schedule_report.html', help='Path to the output HTML report file')
     parser.add_argument('--max-street-gap', type=int, default=30,
                         help='Maximum gap in minutes allowed between consecutive street sessions (default: 30)')
+    parser.add_argument('--max-street-minutes', type=int, default=270,
+                        help='Maximum total minutes of street sessions allowed per day (default: 270)')
 
     args = parser.parse_args()
 
@@ -1508,7 +1573,11 @@ def main():
     start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
 
     # Schedule the appointments
-    appointments, client_availabilities = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
+    appointments, client_availabilities = schedule_appointments(
+        args.input_file,
+        max_street_gap=args.max_street_gap,
+        max_street_minutes_per_day=args.max_street_minutes
+    )
 
     # Export to both JSON and HTML
     export_enhanced_schedule_to_json(appointments, client_availabilities, args.output)
