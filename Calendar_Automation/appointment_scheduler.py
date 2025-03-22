@@ -1039,31 +1039,50 @@ def enforce_zoom_street_gaps(scheduled_appointments, streets_zoom_break=75):
     for day, appointments in appointments_by_day.items():
         appointments.sort(key=lambda x: x['start_time'])
 
-        # Enforce minimum gap between all sessions, with special handling for zoom-street transitions
-        for i in range(len(appointments) - 1):
-            current = appointments[i]
-            next_appt = appointments[i + 1]
+        # Iteratively adjust appointments until no more changes are needed
+        changes_made = True
+        iteration_count = 0
+        max_iterations = 10  # Prevent infinite loops
 
-            current_end = time_to_minutes(current['end_time'])
-            next_start = time_to_minutes(next_appt['start_time'])
+        while changes_made and iteration_count < max_iterations:
+            changes_made = False
+            iteration_count += 1
 
-            required_gap = 15  # Default minimum gap
+            # Enforce minimum gap between all sessions, with special handling for zoom-street transitions
+            for i in range(len(appointments) - 1):
+                current = appointments[i]
+                next_appt = appointments[i + 1]
 
-            # Check if this is a street-zoom or zoom-street transition
-            if ((current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']) or
-                    (current['type'] in ['zoom', 'trial_zoom'] and next_appt['type'] in ['streets', 'trial_streets'])):
-                required_gap = streets_zoom_break
+                current_end = time_to_minutes(current['end_time'])
+                next_start = time_to_minutes(next_appt['start_time'])
 
-            # If gap is insufficient, move the next appointment
-            if next_start - current_end < required_gap:
-                new_start = current_end + required_gap
-                new_end = new_start + next_appt['duration']
+                required_gap = 15  # Default minimum gap
 
-                next_appt['start_time'] = minutes_to_time(new_start)
-                next_appt['end_time'] = minutes_to_time(new_end)
+                # Check if this is a street-zoom or zoom-street transition (either direction)
+                if ((current['type'] in ['streets', 'trial_streets'] and next_appt['type'] in ['zoom', 'trial_zoom']) or
+                        (current['type'] in ['zoom', 'trial_zoom'] and next_appt['type'] in ['streets',
+                                                                                             'trial_streets'])):
+                    required_gap = streets_zoom_break
 
-        # Re-sort after adjustments
-        appointments.sort(key=lambda x: x['start_time'])
+                # If gap is insufficient, move the next appointment
+                if next_start - current_end < required_gap:
+                    new_start = current_end + required_gap
+                    new_end = new_start + next_appt['duration']
+
+                    # Update appointment times
+                    old_start = next_appt['start_time']
+                    old_end = next_appt['end_time']
+                    next_appt['start_time'] = minutes_to_time(new_start)
+                    next_appt['end_time'] = minutes_to_time(new_end)
+
+                    # Record that a change was made
+                    if old_start != next_appt['start_time'] or old_end != next_appt['end_time']:
+                        changes_made = True
+
+                    # Re-sort after adjusting
+                    appointments.sort(key=lambda x: x['start_time'])
+                    # Break the inner loop to restart with the sorted list
+                    break
 
     # Reconstruct the schedule
     updated_appointments = []
