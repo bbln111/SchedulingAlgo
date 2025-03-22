@@ -1102,6 +1102,7 @@ def time_to_minutes(time_str):
 
 def minutes_to_time(minutes):
     """Convert minutes from midnight to time string (HH:MM)."""
+    minutes = minutes % (24 * 60)
     hours = minutes // 60
     mins = minutes % 60
     return f"{hours:02d}:{mins:02d}"
