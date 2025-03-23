@@ -234,6 +234,14 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
             our_start_weekday = python_weekday_to_our_weekday(python_weekday)  # 0-6 (Sunday-Saturday)
             day_offset = (day_number - our_start_weekday + 7) % 7
 
+            print(f"DEBUG: Day offset calculation")
+            print(f"  Input day name: {day_name}")
+            print(f"  Day number: {day_number}")
+            print(f"  Start date: {constraint_start_date}")
+            print(f"  Python weekday: {python_weekday}")
+            print(f"  Our start weekday: {our_start_weekday}")
+            print(f"  Day offset: {day_offset}")
+
             # Skip Saturdays as they are not working days
             if day_number == 6:
                 continue
@@ -291,6 +299,19 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
 
                             daily_availabilities.append((horizon_start, horizon_end, day_number))
 
+                    print(f"DEBUG: Processing time_frame for client {client_id} on {day_name}")
+                    print(f"  Original time_frame: {time_frame}")
+                    print(f"  Parsed start_time: {start_time} ({format_time(start_time)})")
+                    print(f"  Parsed end_time: {end_time} ({format_time(end_time)})")
+                    print(f"  Working hours: {work_start} - {work_end}")
+                    print(
+                        f"  Adjusted start_time: {max(start_time, work_start)} ({format_time(max(start_time, work_start))})")
+                    print(f"  Adjusted end_time: {min(end_time, work_end)} ({format_time(min(end_time, work_end))})")
+                    print(f"  Session duration: {session_duration}")
+                    print(f"  Valid time window: {end_time - start_time >= session_duration}")
+                    print(f"  Resulting horizon_start: {horizon_start}")
+                    print(f"  Resulting horizon_end: {horizon_end}")
+
             # Handle case where time_frames is a dictionary with start/end keys (not in an array)
             elif isinstance(time_frames, dict) and 'start' in time_frames and 'end' in time_frames:
                 start_time = parse_time(time_frames['start'])
@@ -332,6 +353,8 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
                 'priority': priority_value,
                 'availabilities': daily_availabilities
             })
+
+    print(f"\n=== Debug: Client Availabilities ===")
 
     # Create variables for each client's appointment
     appointment_vars = {}
@@ -507,7 +530,6 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         if day == 6:
             continue
 
-
         # Create variables to track if clients are scheduled on this day
         day_clients = {}
         for client in client_availabilities:
@@ -614,10 +636,15 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         priority = client['priority']
         # Prioritize client by priority value and add a small weight for lower client IDs
         # This ensures deterministic behavior when clients have identical constraints
-        client_id_int = int(client_id) if client_id.isdigit() else 0
+
+        client_index = next((i for i, c in enumerate(client_availabilities) if c['id'] == client_id), 0)
         objective_terms.append(appointment_scheduled_vars[client_id] * priority * 100)  # Weight by priority
-        objective_terms.append(
-            appointment_scheduled_vars[client_id] * (-client_id_int * 0.1))  # Small preference for lower client IDs
+        # Small preference based on index
+        objective_terms.append(appointment_scheduled_vars[client_id] * (-client_index * 0.1))
+        print(f"DEBUG: Client ID processing")
+        print(f"  Original client_id: {client_id}")
+        print(f"  Converted to int: {client_index}")
+        print(f"  Weight in objective: {(-client_index * 0.1)}")
 
     # Maximize the number of days with at least 2 street sessions
     for day in days_with_streets:
@@ -636,12 +663,51 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
             weight = 500 if i <= 2 else 300 if i <= 3 else 200
             objective_terms.append(has_at_least_i * weight)
 
+    print(f"\n=== Debug: Objective Function ===")
+    print(f"Number of terms in objective: {len(objective_terms)}")
+    for i, term in enumerate(objective_terms):
+        print(f"Term {i}: {term}")
+
     model.Maximize(sum(objective_terms))
+
+    # Add this after all constraints have been added but before solving:
+    print(f"Model has been created with the following stats:")
+    print(f"Variables dictionary size: {len(model.__dict__.get('_CpModel__variables', {}))}")
+    print(f"Constraints dictionary size: {len(model.__dict__.get('_CpModel__constraints', {}))}")
+    print(f"Client availabilities: {len(client_availabilities)}")
+    print(f"Appointment variables: {len(appointment_vars)}")
+    print(f"Day variables: {len(appointment_day_vars)}")
+    print(f"Scheduled variables: {len(appointment_scheduled_vars)}")
+
+    # Check appointments that can potentially be scheduled
+    print(f"\n=== Debug: Potential Appointments ===")
+    for client_id, var in appointment_scheduled_vars.items():
+        client_type = next(c['type'] for c in client_availabilities if c['id'] == client_id)
+        client_day_var = appointment_day_vars[client_id]
+        print(f"Client {client_id} ({client_type}): scheduled_var={var.Index()}, day_var={client_day_var.Index()}")
 
     # Solve the model
     solver = cp_model.CpSolver()
-    solver.parameters.log_search_progress = False  # Algo Verbosity
+    solver.parameters.log_search_progress = True  # Algo Verbosity
     status = solver.Solve(model)
+
+    print(f"\n=== Debug: Solver Stats ===")
+    print(f"Solution status: {solver.StatusName(status)}")
+    print(f"Objective value: {solver.ObjectiveValue()}")
+    print(f"Wall time: {solver.WallTime()} seconds")
+    print(f"Branches: {solver.NumBranches()}")
+    print(f"Conflicts: {solver.NumConflicts()}")
+
+    # Check individual variable values
+    print(f"\n=== Debug: Appointment Variables ===")
+    for client_id, var in appointment_scheduled_vars.items():
+        scheduled = solver.Value(var)
+        if scheduled:
+            start_time = solver.Value(appointment_vars[client_id])
+            day = solver.Value(appointment_day_vars[client_id])
+            print(f"Client {client_id}: scheduled=True, day={day}, start_time={start_time}")
+        else:
+            print(f"Client {client_id}: scheduled=False")
 
     # Process the results
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
@@ -673,6 +739,8 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
                     'end_time': f"{end_hour:02d}:{end_minute:02d}",
                     'duration': client['duration']
                 })
+
+        print(f"\n=== Debug: Client Availabilities ===")
 
         scheduled_appointments = minimize_gaps_post_processing(scheduled_appointments)
 
@@ -1302,6 +1370,7 @@ def integrate_with_scheduler(scheduled_appointments, client_availabilities, outp
         session_type = client['type']
         if session_type in type_counts:
             type_counts[session_type]['total'] += 1
+    print(f"\n=== Debug: Client Availabilities ===")
 
     # Count scheduled for each type
     for appt in scheduled_appointments:
@@ -1406,6 +1475,7 @@ def export_enhanced_schedule_to_json(scheduled_appointments, client_availabiliti
         session_type = client['type']
         if session_type in type_counts:
             type_counts[session_type]['total'] += 1
+    print(f"\n=== Debug: Client Availabilities ===")
 
     # Count scheduled for each type
     for appt in scheduled_appointments:
@@ -1501,6 +1571,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
         session_type = client['type']
         if session_type in type_counts:
             type_counts[session_type]['total'] += 1
+    print(f"\n=== Debug: Client Availabilities ===")
 
     # Count scheduled for each type
     for appt in scheduled_appointments:

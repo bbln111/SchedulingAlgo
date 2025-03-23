@@ -4,7 +4,7 @@
     {
       "id": "1680659023",
       "priority": "High",
-      "type": "zoom",
+      "type": "streets",
       "time": 60,
       "days": [
         {
@@ -28,6 +28,43 @@
           "time_frames": [
             {
               "start": "2025-03-20T21:00:00",
+              "end": "2025-03-20T22:00:00"
+            }
+          ]
+        },
+        {
+          "day": "Friday",
+          "time_frames": []
+        }
+      ]
+    },
+    {
+      "id": "2222",
+      "priority": "High",
+      "type": "streets",
+      "time": 60,
+      "days": [
+        {
+          "day": "Sunday",
+          "time_frames": []
+        },
+        {
+          "day": "Monday",
+          "time_frames": []
+        },
+        {
+          "day": "Tuesday",
+          "time_frames": []
+        },
+        {
+          "day": "Wednesday",
+          "time_frames": []
+        },
+        {
+          "day": "Thursday",
+          "time_frames": [
+            {
+              "start": "2025-03-20T19:00:00",
               "end": "2025-03-20T22:00:00"
             }
           ]
@@ -251,110 +288,6 @@
             {
               "start": "2025-03-18T19:00:00",
               "end": "2025-03-18T21:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Wednesday",
-          "time_frames": [
-            {
-              "start": "2025-03-19T19:00:00",
-              "end": "2025-03-19T21:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Thursday",
-          "time_frames": []
-        },
-        {
-          "day": "Friday",
-          "time_frames": []
-        }
-      ]
-    },
-    {
-      "id": "1852303580",
-      "priority": "High",
-      "type": "streets",
-      "time": 60,
-      "days": [
-        {
-          "day": "Sunday",
-          "time_frames": [
-            {
-              "start": "2025-03-16T10:00:00",
-              "end": "2025-03-16T23:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Monday",
-          "time_frames": [
-            {
-              "start": "2025-03-17T19:00:00",
-              "end": "2025-03-17T21:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Tuesday",
-          "time_frames": [
-            {
-              "start": "2025-03-18T19:00:00",
-              "end": "2025-03-18T21:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Wednesday",
-          "time_frames": [
-            {
-              "start": "2025-03-19T19:00:00",
-              "end": "2025-03-19T21:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Thursday",
-          "time_frames": []
-        },
-        {
-          "day": "Friday",
-          "time_frames": []
-        }
-      ]
-    },
-    {
-      "id": "1852303670",
-      "priority": "High",
-      "type": "streets",
-      "time": 60,
-      "days": [
-        {
-          "day": "Sunday",
-          "time_frames": [
-            {
-              "start": "2025-03-16T10:00:00",
-              "end": "2025-03-16T23:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Monday",
-          "time_frames": [
-            {
-              "start": "2025-03-17T19:00:00",
-              "end": "2025-03-17T21:00:00"
-            }
-          ]
-        },
-        {
-          "day": "Tuesday",
-          "time_frames": [
-            {
-              "start": "2025-03-18T10:00:00",
-              "end": "2025-03-18T23:00:00"
             }
           ]
         },
