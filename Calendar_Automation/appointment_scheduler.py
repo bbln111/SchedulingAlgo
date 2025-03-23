@@ -1084,7 +1084,9 @@ def validate_schedule(appointments, min_break=15, zoom_streets_break=75,
                 result["valid"] = False
                 result["violations"].append({
                     "constraint": "minimum_break",
-                    "description": f"Insufficient break ({gap} minutes) between {current['type']} (Client {current['client_id']}) and {next_appt['type']} (Client {next_appt['client_id']}) on {day}",
+                    "description": f"Insufficient break ({gap} minutes) between {current['type']} "
+                                   f"(Client {current['client_id']}) and {next_appt['type']} "
+                                   f"(Client {next_appt['client_id']}) on {day}",
                     "expected": min_break,
                     "actual": gap
                 })
@@ -1099,7 +1101,9 @@ def validate_schedule(appointments, min_break=15, zoom_streets_break=75,
                     result["valid"] = False
                     result["violations"].append({
                         "constraint": "zoom_streets_break",
-                        "description": f"Insufficient break ({gap} minutes) between {current['type']} (Client {current['client_id']}) and {next_appt['type']} (Client {next_appt['client_id']}) on {day}",
+                        "description": f"Insufficient break ({gap} minutes) between {current['type']} "
+                                       f"(Client {current['client_id']}) and {next_appt['type']} "
+                                       f"(Client {next_appt['client_id']}) on {day}",
                         "expected": zoom_streets_break,
                         "actual": gap
                     })
@@ -1143,7 +1147,8 @@ def validate_schedule(appointments, min_break=15, zoom_streets_break=75,
                     result["valid"] = False
                     result["violations"].append({
                         "constraint": "max_street_gap",
-                        "description": f"Gap between street sessions ({gap} minutes) exceeds maximum on {day} between Client {current['client_id']} and Client {next_street['client_id']}",
+                        "description": f"Gap between street sessions ({gap} minutes) exceeds maximum on {day} "
+                                       f"between Client {current['client_id']} and Client {next_street['client_id']}",
                         "expected": f"≤{max_street_gap}",
                         "actual": gap
                     })
@@ -1182,8 +1187,10 @@ def validate_schedule(appointments, min_break=15, zoom_streets_break=75,
                     result["valid"] = False
                     result["violations"].append({
                         "constraint": "no_overlapping_appointments",
-                        "description": f"Appointments for Client {appt1['client_id']} and Client {appt2['client_id']} overlap on {day}",
-                        "details": f"{appt1['start_time']}-{appt1['end_time']} overlaps with {appt2['start_time']}-{appt2['end_time']}"
+                        "description": f"Appointments for Client {appt1['client_id']} and Client {appt2['client_id']} "
+                                       f"overlap on {day}",
+                        "details": f"{appt1['start_time']}-{appt1['end_time']} overlaps with "
+                                   f"{appt2['start_time']}-{appt2['end_time']}"
                     })
 
     return result
@@ -1794,8 +1801,8 @@ def main():
                         help='Maximum gap in minutes allowed between consecutive street sessions (default: 30)')
     parser.add_argument('--validate-only', action='store_true',
                         help='Validate an existing schedule without generating a new one')
-    parser.add_argument('--retries', type=int, default=3,
-                        help='Number of retries if validation fails (default: 3)')
+    parser.add_argument('--retries', type=int, default=10,
+                        help='Number of retries if validation fails (default: 10)')
 
     args = parser.parse_args()
 
