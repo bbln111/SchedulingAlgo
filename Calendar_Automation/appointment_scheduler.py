@@ -93,12 +93,21 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         json_data = json.load(constraints_file)
 
     constraint_start_date = datetime.strptime(json_data['start_date'], '%Y-%m-%d')
+    python_weekday = constraint_start_date.weekday()
+    our_weekday = python_weekday_to_our_weekday(python_weekday)
+
+    print(f"DEBUG: Input start date: {json_data['start_date']}")
+    print(f"DEBUG: Parsed date: {constraint_start_date}")
+    print(f"DEBUG: Python weekday: {python_weekday} (0=Monday, 6=Sunday)")
+    print(f"DEBUG: Our weekday system: {our_weekday} (0=Sunday, 6=Saturday)")
+    print(f"DEBUG: Day name according to our system: {day_number_to_name(our_weekday)}")
+
     clients = json_data['appointments']
 
     # Print summary of input data
     print(f"\n=== Input Data Summary ===")
     print(f"Start date: {constraint_start_date.strftime('%Y-%m-%d')} "
-          f"({day_number_to_name(constraint_start_date.weekday())})")
+          f"({day_number_to_name(python_weekday_to_our_weekday(constraint_start_date.weekday()))})")
     print(f"Total clients: {len(clients)}")
     print(f"Maximum gap between street sessions: {max_street_gap} minutes")
     print(f"Maximum street session minutes per day: {max_street_minutes_per_day} minutes")
@@ -331,6 +340,9 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
 
     for client in client_availabilities:
         client_id = client['id']
+        print(f"DEBUG: Processing client {client_id} with {len(client['availabilities'])} availability slots")
+        for start, end, day_number in client['availabilities']:
+            print(f"DEBUG: Availability slot: day {day_number}, start {start}, end {end}")
 
         # Create a variable for the start time of the appointment
         appointment_vars[client_id] = model.NewIntVar(0, horizon_minutes, f'start_{client_id}')
@@ -369,6 +381,9 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
     street_sessions_by_day = {}  # Keep track of street sessions for each day
 
     for day in range(7):
+        if day in street_sessions_by_day and street_sessions_by_day[day]:
+            print(f"DEBUG: Day {day} ({day_number_to_name(day)}) "
+                  f"has {len(street_sessions_by_day[day])} potential street sessions")
         # Skip Saturday
         if day == 6:
             continue
@@ -484,9 +499,14 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
     # For each day, add constraints to ensure all street sessions are scheduled before or after all zoom sessions
     # (not interleaved) and have the required gap between them
     for day in range(7):
+        if day in street_sessions_by_day and street_sessions_by_day[day]:
+            print(f"DEBUG: Day {day} ({day_number_to_name(day)}) "
+                  f"has {len(street_sessions_by_day[day])} potential street sessions")
+
         # Skip Saturday
         if day == 6:
             continue
+
 
         # Create variables to track if clients are scheduled on this day
         day_clients = {}
