@@ -620,6 +620,7 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
 
     # Solve the model
     solver = cp_model.CpSolver()
+    solver.parameters.log_search_progress = False  # Algo Verbosity
     status = solver.Solve(model)
 
     # Process the results
@@ -1018,6 +1019,298 @@ def export_schedule_to_json(scheduled_appointments, output_file):
     with open(output_file, 'w') as f:
         json.dump(scheduled_appointments, f, indent=2)
     print(f"Schedule exported to {output_file}")
+
+
+def validate_schedule(appointments, min_break=15, zoom_streets_break=75,
+                      max_street_gap=30, max_street_minutes=270):
+    """
+    Validates a schedule against all constraints.
+
+    Args:
+        appointments: List of appointment dictionaries with:
+            - client_id: Client ID
+            - type: Session type (streets, trial_streets, zoom, trial_zoom)
+            - day: Day name
+            - date: Date as string YYYY-MM-DD
+            - start_time: Start time as string HH:MM
+            - end_time: End time as string HH:MM
+            - duration: Duration in minutes
+        min_break: Minimum break between any two appointments (minutes)
+        zoom_streets_break: Minimum break between zoom and streets sessions (minutes)
+        max_street_gap: Maximum gap between consecutive street sessions (minutes)
+        max_street_minutes: Maximum street session minutes per day (minutes)
+
+    Returns:
+        dict: Validation result with:
+            - valid: Boolean indicating if all constraints are met
+            - violations: List of constraint violations
+    """
+    # Initialize result
+    result = {
+        "valid": True,
+        "violations": []
+    }
+
+    # Group appointments by day
+    appointments_by_day = {}
+    for appt in appointments:
+        day = appt['date']
+        if day not in appointments_by_day:
+            appointments_by_day[day] = []
+        appointments_by_day[day].append(appt)
+
+    # Helper functions
+    def time_to_minutes(time_str):
+        """Convert time string (HH:MM) to minutes from midnight."""
+        hours, minutes = map(int, time_str.split(':'))
+        return hours * 60 + minutes
+
+    # Check each day's schedule
+    for day, day_appointments in appointments_by_day.items():
+        # Sort by start time
+        day_appointments.sort(key=lambda x: x['start_time'])
+
+        # Check 1: Minimum breaks between appointments
+        for i in range(len(day_appointments) - 1):
+            current = day_appointments[i]
+            next_appt = day_appointments[i + 1]
+
+            current_end = time_to_minutes(current['end_time'])
+            next_start = time_to_minutes(next_appt['start_time'])
+            gap = next_start - current_end
+
+            # Check minimum break
+            if gap < min_break:
+                result["valid"] = False
+                result["violations"].append({
+                    "constraint": "minimum_break",
+                    "description": f"Insufficient break ({gap} minutes) between {current['type']} (Client {current['client_id']}) and {next_appt['type']} (Client {next_appt['client_id']}) on {day}",
+                    "expected": min_break,
+                    "actual": gap
+                })
+
+            # Check zoom/streets break
+            streets_types = ['streets', 'trial_streets']
+            zoom_types = ['zoom', 'trial_zoom']
+
+            if ((current['type'] in streets_types and next_appt['type'] in zoom_types) or
+                    (current['type'] in zoom_types and next_appt['type'] in streets_types)):
+                if gap < zoom_streets_break:
+                    result["valid"] = False
+                    result["violations"].append({
+                        "constraint": "zoom_streets_break",
+                        "description": f"Insufficient break ({gap} minutes) between {current['type']} (Client {current['client_id']}) and {next_appt['type']} (Client {next_appt['client_id']}) on {day}",
+                        "expected": zoom_streets_break,
+                        "actual": gap
+                    })
+
+        # Check 2: Minimum of two street sessions per day or none
+        street_sessions = [appt for appt in day_appointments
+                           if appt['type'] in ['streets', 'trial_streets']]
+
+        if 1 == len(street_sessions):
+            result["valid"] = False
+            result["violations"].append({
+                "constraint": "minimum_street_sessions",
+                "description": f"Only 1 street session on {day}, must be at least 2 or none",
+                "expected": "0 or ≥2",
+                "actual": len(street_sessions)
+            })
+
+        # Check 3: Maximum street minutes per day
+        if street_sessions:
+            total_street_minutes = sum(s['duration'] for s in street_sessions)
+            if total_street_minutes > max_street_minutes:
+                result["valid"] = False
+                result["violations"].append({
+                    "constraint": "max_street_minutes",
+                    "description": f"Too many street session minutes ({total_street_minutes}) on {day}",
+                    "expected": f"≤{max_street_minutes}",
+                    "actual": total_street_minutes
+                })
+
+        # Check 4: Maximum gap between consecutive street sessions
+        if len(street_sessions) >= 2:
+            for i in range(len(street_sessions) - 1):
+                current = street_sessions[i]
+                next_street = street_sessions[i + 1]
+
+                current_end = time_to_minutes(current['end_time'])
+                next_start = time_to_minutes(next_street['start_time'])
+                gap = next_start - current_end
+
+                if gap > max_street_gap:
+                    result["valid"] = False
+                    result["violations"].append({
+                        "constraint": "max_street_gap",
+                        "description": f"Gap between street sessions ({gap} minutes) exceeds maximum on {day} between Client {current['client_id']} and Client {next_street['client_id']}",
+                        "expected": f"≤{max_street_gap}",
+                        "actual": gap
+                    })
+
+    # Check 5: One appointment per client per day (across all days)
+    client_days = {}
+    for appt in appointments:
+        client_id = appt['client_id']
+        day = appt['date']
+        key = f"{client_id}_{day}"
+
+        if key in client_days:
+            result["valid"] = False
+            result["violations"].append({
+                "constraint": "one_appointment_per_client_per_day",
+                "description": f"Client {client_id} has multiple appointments on {day}",
+                "expected": "1",
+                "actual": "≥2"
+            })
+        else:
+            client_days[key] = True
+
+    # Check 6: No overlapping appointments
+    for day, day_appointments in appointments_by_day.items():
+        for i in range(len(day_appointments)):
+            for j in range(i + 1, len(day_appointments)):
+                appt1 = day_appointments[i]
+                appt2 = day_appointments[j]
+
+                start1 = time_to_minutes(appt1['start_time'])
+                end1 = time_to_minutes(appt1['end_time'])
+                start2 = time_to_minutes(appt2['start_time'])
+                end2 = time_to_minutes(appt2['end_time'])
+
+                if (start1 <= start2 < end1) or (start1 < end2 <= end1) or (start2 <= start1 < end2):
+                    result["valid"] = False
+                    result["violations"].append({
+                        "constraint": "no_overlapping_appointments",
+                        "description": f"Appointments for Client {appt1['client_id']} and Client {appt2['client_id']} overlap on {day}",
+                        "details": f"{appt1['start_time']}-{appt1['end_time']} overlaps with {appt2['start_time']}-{appt2['end_time']}"
+                    })
+
+    return result
+
+
+def integrate_with_scheduler(scheduled_appointments, client_availabilities, output_file):
+    """
+    Validates the schedule and modifies the output if needed.
+
+    Args:
+        scheduled_appointments: List of appointment dictionaries
+        client_availabilities: List of client availability dictionaries
+        output_file: Path to the output JSON file
+
+    Returns:
+        dict: The validated and potentially fixed schedule
+    """
+    import json
+    from datetime import datetime, timedelta
+
+    # First, validate the schedule
+    validation_result = validate_schedule(scheduled_appointments)
+
+    if not validation_result["valid"]:
+        print("\n=== Schedule Validation Failed ===")
+        print(f"Found {len(validation_result['violations'])} constraint violations:")
+
+        for i, violation in enumerate(validation_result["violations"], 1):
+            print(f"\nViolation {i}: {violation['constraint']}")
+            print(f"  {violation['description']}")
+            if "expected" in violation and "actual" in violation:
+                print(f"  Expected: {violation['expected']}, Actual: {violation['actual']}")
+            if "details" in violation:
+                print(f"  Details: {violation['details']}")
+
+        # Here you could attempt to fix the schedule or reject it entirely
+        # For simplicity, we'll just flag it as invalid in the output
+
+    # Build the filled appointments list
+    filled_appointments = []
+    for appt in scheduled_appointments:
+        client_id = appt['client_id']
+        appt_date = appt['date']
+        start_time = appt['start_time']
+        end_time = appt['end_time']
+
+        # Convert to ISO format for output
+        iso_start_time = f"{appt_date}T{start_time}:00"
+        iso_end_time = f"{appt_date}T{end_time}:00"
+
+        filled_appointments.append({
+            "id": client_id,
+            "type": appt['type'],
+            "start_time": iso_start_time,
+            "end_time": iso_end_time
+        })
+
+    # Get set of scheduled client IDs
+    scheduled_client_ids = set(appt['client_id'] for appt in scheduled_appointments)
+
+    # Get all client IDs
+    all_client_ids = set(client['id'] for client in client_availabilities)
+
+    # Get unscheduled client IDs
+    unscheduled_client_ids = all_client_ids - scheduled_client_ids
+
+    # Build unfilled appointments list
+    unfilled_appointments = []
+    for client_id in unscheduled_client_ids:
+        client_data = next((c for c in client_availabilities if c['id'] == client_id), None)
+        if client_data:
+            unfilled_appointments.append({
+                "id": client_id,
+                "type": client_data['type']
+            })
+
+    # Count sessions by type
+    session_types = ['streets', 'trial_streets', 'zoom', 'trial_zoom', 'field']
+    type_counts = {
+        session_type: {
+            'scheduled': 0,
+            'total': 0,
+            'rate': 0.0
+        } for session_type in session_types
+    }
+
+    # Count total for each type
+    for client in client_availabilities:
+        session_type = client['type']
+        if session_type in type_counts:
+            type_counts[session_type]['total'] += 1
+
+    # Count scheduled for each type
+    for appt in scheduled_appointments:
+        session_type = appt['type']
+        if session_type in type_counts:
+            type_counts[session_type]['scheduled'] += 1
+
+    # Calculate rates
+    for session_type in type_counts:
+        total = type_counts[session_type]['total']
+        if total > 0:
+            scheduled = type_counts[session_type]['scheduled']
+            type_counts[session_type]['rate'] = round(scheduled / total, 2)
+        else:
+            type_counts[session_type]['rate'] = 1.0  # If total is 0, set rate to 1.0
+
+    # Assemble the final output structure
+    output_data = {
+        "filled_appointments": filled_appointments,
+        "unfilled_appointments": unfilled_appointments,
+        "validation": {
+            "valid": validation_result["valid"],
+            "issues": validation_result["violations"] if not validation_result["valid"] else []
+        },
+        "type_balance": type_counts
+    }
+
+    # Write to file
+    with open(output_file, 'w') as f:
+        json.dump(output_data, f, indent=2)
+
+    print(f"\nEnhanced schedule exported to {output_file}")
+    if not validation_result["valid"]:
+        print(f"WARNING: Schedule has constraint violations - see {output_file} for details")
+
+    return output_data
 
 
 def export_enhanced_schedule_to_json(scheduled_appointments, client_availabilities, output_file):
@@ -1499,6 +1792,10 @@ def main():
     parser.add_argument('--html', type=str, default='schedule_report.html', help='Path to the output HTML report file')
     parser.add_argument('--max-street-gap', type=int, default=30,
                         help='Maximum gap in minutes allowed between consecutive street sessions (default: 30)')
+    parser.add_argument('--validate-only', action='store_true',
+                        help='Validate an existing schedule without generating a new one')
+    parser.add_argument('--retries', type=int, default=3,
+                        help='Number of retries if validation fails (default: 3)')
 
     args = parser.parse_args()
 
@@ -1507,17 +1804,110 @@ def main():
         data = json.load(f)
     start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
 
-    # Schedule the appointments
-    appointments, client_availabilities = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
+    if args.validate_only:
+        # Load existing schedule
+        try:
+            with open(args.output, 'r') as f:
+                existing_schedule = json.load(f)
 
-    # Export to both JSON and HTML
-    export_enhanced_schedule_to_json(appointments, client_availabilities, args.output)
-    export_schedule_to_html(appointments, client_availabilities, args.html, start_date)
+            # Convert the filled_appointments to our internal format for validation
+            appointments = []
+            for appt in existing_schedule.get('filled_appointments', []):
+                start_time = datetime.fromisoformat(appt['start_time'])
+                end_time = datetime.fromisoformat(appt['end_time'])
 
-    # Print a message with links to both files
-    print(f"\nExports completed:")
-    print(f"- JSON: {args.output}")
-    print(f"- HTML Report: {args.html}")
+                appointments.append({
+                    'client_id': appt['id'],
+                    'type': appt['type'],
+                    'day': start_time.strftime('%A'),
+                    'date': start_time.strftime('%Y-%m-%d'),
+                    'start_time': start_time.strftime('%H:%M'),
+                    'end_time': end_time.strftime('%H:%M'),
+                    'duration': (end_time - start_time).seconds // 60
+                })
+
+            # Load client availabilities from the input file
+            client_availabilities = []
+            for client in data['appointments']:
+                if client['priority'] != "Exclude":
+                    client_availabilities.append({
+                        'id': client['id'],
+                        'type': client['type']
+                    })
+
+            # Validate the schedule
+            validation_result = validate_schedule(appointments)
+            if validation_result["valid"]:
+                print("Existing schedule is valid - all constraints are satisfied.")
+            else:
+                print("\n=== Schedule Validation Failed ===")
+                print(f"Found {len(validation_result['violations'])} constraint violations:")
+
+                for i, violation in enumerate(validation_result["violations"], 1):
+                    print(f"\nViolation {i}: {violation['constraint']}")
+                    print(f"  {violation['description']}")
+                    if "expected" in violation and "actual" in violation:
+                        print(f"  Expected: {violation['expected']}, Actual: {violation['actual']}")
+                    if "details" in violation:
+                        print(f"  Details: {violation['details']}")
+
+            return
+        except FileNotFoundError:
+            print(f"Error: Schedule file '{args.output}' not found. Cannot validate.")
+            return
+        except json.JSONDecodeError:
+            print(f"Error: Schedule file '{args.output}' is not valid JSON. Cannot validate.")
+            return
+
+    appointments = None
+    validation_result = None
+    client_availabilities = None
+    # Schedule the appointments with retry logic
+    for attempt in range(args.retries):
+        appointments, client_availabilities = schedule_appointments(args.input_file, max_street_gap=args.max_street_gap)
+
+        if not appointments:
+            print(f"Attempt {attempt + 1}/{args.retries}: Scheduler failed to find a solution")
+            continue
+
+        # Validate the schedule
+        validation_result = validate_schedule(appointments)
+
+        if validation_result["valid"]:
+            print(f"Attempt {attempt + 1}/{args.retries}: Found valid schedule!")
+            break
+        else:
+            print(f"\nAttempt {attempt + 1}/{args.retries}: Schedule validation failed")
+            print(f"Found {len(validation_result['violations'])} constraint violations:")
+
+            for i, violation in enumerate(validation_result["violations"], 1):
+                print(f"\nViolation {i}: {violation['constraint']}")
+                print(f"  {violation['description']}")
+                if "expected" in violation and "actual" in violation:
+                    print(f"  Expected: {violation['expected']}, Actual: {violation['actual']}")
+                if "details" in violation:
+                    print(f"  Details: {violation['details']}")
+
+            if attempt < args.retries - 1:
+                print(f"\nRetrying... ({attempt + 1}/{args.retries})")
+
+    # Export the schedule (even if invalid after all retries)
+    if appointments:
+        # Use the new validation-aware export function
+        integrate_with_scheduler(appointments, client_availabilities, args.output)
+        export_schedule_to_html(appointments, client_availabilities, args.html, start_date)
+
+        # Print a message with links to both files
+        print(f"\nExports completed:")
+        print(f"- JSON: {args.output}")
+        print(f"- HTML Report: {args.html}")
+
+        # Print final validation status
+        if not validation_result.get("valid", True):
+            print(f"\nWARNING: Final schedule still has {len(validation_result['violations'])} constraint violations")
+            print("Review the JSON output for details and consider manual adjustments")
+    else:
+        print("Failed to generate a valid schedule after all retry attempts")
 
 
 if __name__ == "__main__":
