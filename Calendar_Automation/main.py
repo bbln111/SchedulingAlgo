@@ -119,6 +119,8 @@ def main():
 
 if __name__ == '__main__':
     try:
+        print("started")
         main()
+        print("finished")
     except Exception as e:
         logger.error(f"Error in main function: {e}")

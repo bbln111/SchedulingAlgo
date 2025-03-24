@@ -168,7 +168,7 @@ def write_to_monday(data):
     appointments = _get_appointments(data)
 
     monday_api = moday_api_sdk.MondayApi(api_key=API_KEY, url=url, main_board_id=str(BIG_BOARD_ID))
-    clients = monday_api.get_clients()
+    #clients = monday_api.get_clients()
 
     sorted_appointments = sort_appointment_by_client(appointments)
 

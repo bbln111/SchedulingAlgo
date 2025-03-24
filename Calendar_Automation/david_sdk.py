@@ -37,7 +37,7 @@ def run_on_file(input_file_path):
             }
 
         # Run the appointment scheduler (OR-Tools version)
-        appointments = ortools_scheduler(input_file_path, max_street_gap=30)
+        appointments, availabilities = ortools_scheduler(input_file_path, max_street_gap=30)
 
         # Convert scheduler output format to the format expected by the existing system
         result = convert_scheduler_output(appointments, input_file_path)
