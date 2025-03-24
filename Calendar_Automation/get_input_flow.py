@@ -11,7 +11,7 @@ api_key = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQzNDY0NDY5OCwiYWFpIjoxMSwidWlkIjo2MzQ0
 
 KEY_DAYS_REQUESTED = 'numeric_mknnxrbp'
 DEFAULT_REQUESTED_DAYS = 1
-
+GOT_AVAIlABILITIES_INDEX = 8
 
 
 #def try_parse_as_date(value: str):
@@ -50,9 +50,26 @@ def _parse_day(big_dict: dict):
 
 def _parse_status(big_dict: dict):
     status_as_string = big_dict.get("status")
+    if status_as_string is None:
+        return None
     date_string = json.loads(status_as_string)
     index = date_string.get("index")
     return index
+
+def _parse_location(big_dict: dict):
+    location_as_string = big_dict.get("label_mkn677r1")
+    if location_as_string is None:
+        return None
+    date_string = json.loads(location_as_string)
+    index = date_string.get("index")
+
+    locations_by_index = {
+        0: "streets",
+        3: "zoom",
+    }
+    if index not in locations_by_index:
+        return None
+    return locations_by_index[index]
 
 def _get_days(big_dict: dict):
     days = []
@@ -89,8 +106,9 @@ def parse_column_dict(big_dict: dict):
     days_list = _get_days(big_dict)
     has_timespan = len([y for y in days_list if y is not None]) > 0
     requested_amount = _get_requested_days(big_dict)
+    location = _parse_location(big_dict)
 
-    return date, days_list, has_timespan, requested_amount
+    return date, days_list, has_timespan, requested_amount, location
 
 def duplicate_client(big_dict: dict, client_id, factor):
     value = big_dict.get(client_id)
@@ -109,7 +127,7 @@ def get_board_data():
     query = f"""
     query GetBoardItems {{
       boards(ids: {BOARD_ID}) {{
-        items_page(limit: 20) {{
+        items_page(limit: 40) {{
           items {{
             id
             name
@@ -132,34 +150,6 @@ def get_board_data():
     return data
 
 def get_timespans_raw():
-    #headers = {
-    #    "Authorization": api_key,
-    #    "Content-Type": "application/json"
-    #}
-
-    #query = f"""
-    #query GetBoardItems {{
-    #  boards(ids: {BOARD_ID}) {{
-    #    items_page(limit: 20) {{
-    #      items {{
-    #        id
-    #        name
-    #        subitems {{
-    #          id
-    #          name
-    #          column_values {{
-    #            id
-    #            value
-    #          }}
-    #        }}
-    #      }}
-    #    }}
-    #  }}
-    #}}
-    #"""
-
-    #response = requests.post(url, json={"query": query}, headers=headers)
-    #data = response.json()
     data = get_board_data()
     if "errors" in data:
         logger.error("Errors:", data["errors"])
@@ -186,17 +176,25 @@ def get_timespans_raw():
                     for col in subitem.get("column_values", [])
                 }
                 status = _parse_status(columns_dict)
-                if status == 1:
+                if status != GOT_AVAIlABILITIES_INDEX:
                     continue
 
-                date, days_list, has_timespan, requested_amount = parse_column_dict(columns_dict)
+                date, days_list, has_timespan, requested_amount, location = parse_column_dict(columns_dict)
+                if location is None:
+                    logger.warning(f"No location found for {client_name} : {client_id}. defauling to zoom")
+                    location = "zoom"
 
+                from datetime import timedelta
+                today_minus_a_week = datetime.datetime.today().date() - timedelta(weeks=1)
+                if datetime.datetime.strptime(date, '%Y-%m-%d').date() <= today_minus_a_week:
+                    print(client_name, date)
+                    continue
                 if has_timespan:
                     if not client_id in save_dictionary:
-                        save_dictionary[client_id] = {"name": client_name, date: days_list }
+                        save_dictionary[client_id] = {"name": client_name, date: days_list, "requested_amount": requested_amount, "location": location }
                     else:
                         save_dictionary[client_id][date] = days_list
-                duplicate_client(save_dictionary, client_id, requested_amount)
+                #duplicate_client(save_dictionary, client_id, requested_amount)
     return save_dictionary
 
 def parse_time_frame(start_date, times_string, day_index):
@@ -226,6 +224,16 @@ def save_to_files(data_dict: dict, file_path: str):
             json.dump(data_to_file, f, ensure_ascii=False, indent=2)
         return output_file_name
 
+def try_parse_time(time_as_string):
+    formats = ["%H:%M:%S", "%H:%M"]
+    for format in formats:
+        try:
+            ret_date = datetime.datetime.strptime(time_as_string, format)
+            return ret_date
+        except Exception:
+            logger.error(f"Failed to parse {time_as_string}.")
+    return None
+
 def authistic_day_list_fix(days_list: list):
     """add here bandages for the bot giving wrong format timespan"""
     ret_list = []
@@ -245,7 +253,10 @@ def authistic_day_list_fix(days_list: list):
             continue
         elif '-' not in day:
             d = day.strip("\"").strip("\'")
-            time_a = datetime.datetime.strptime(d, "%H:%M:%S")
+            time_a = try_parse_time(d)
+            if time_a is None:
+                continue
+            #time_a = datetime.datetime.strptime(d, "%H:%M:%S")
             time_b = time_a + datetime.timedelta(hours=2)
             span_as_string = f"{time_a.strftime('%H:%M:%S')}-{time_b.strftime('%H:%M:%S')}"
             ret_list.append(span_as_string)
@@ -274,15 +285,19 @@ def convent_to_input_file_format(monday_dict: dict):
         for key in raw_dict.keys():
             if key is None:
                 continue
-            if key == "name":
+            elif key == "name":
                 name  = raw_dict.get(key)
+            elif key == "requested_amount":
+                requested_amount = raw_dict.get(key)
+            elif key == "location":
+                location = raw_dict.get(key)
             else:
                 start_date = key
                 days_list = raw_dict[key]
 
         if days_list is None: # כפיר מוכתרי
             continue
-        logger.info(f"name: {name} \t start_date: {start_date} \t days_list: {days_list}")
+        logger.info(f"name: {name} \t start_date: {start_date} \t days_list: {days_list} \t requested_amount: {requested_amount}, location: {location}")
         fixed_days_list = authistic_day_list_fix(days_list)
         logger.info(f"fixed_days_list: {fixed_days_list}")
 
@@ -298,7 +313,7 @@ def convent_to_input_file_format(monday_dict: dict):
             if test_time_frame[0] is None:
                 test_time_frame.pop(0)
 
-        appointment = {"id": id, "priority": priority, "type": type__r, "time": time, "days": days}
+        appointment = {"id": id, "priority": priority, "type": location, "time": time, "requested_amount": requested_amount, "days": days}
         if start_date in return_dict:
             return_dict[start_date].append(appointment)
         else:

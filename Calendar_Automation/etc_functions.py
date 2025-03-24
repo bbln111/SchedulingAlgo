@@ -44,19 +44,19 @@ def unite_output_from_script(output_dict):
     result = output_dict.copy()  # Create a copy to avoid modifying the original
 
     # Process filled appointments
-    filled_appointments = result.get('filled_appointments', [])
+    filled_appointments = result#.get('filled_appointments', [])
     for appointment in filled_appointments:
         appointment_id = appointment.get('id', '')
         if '-' in appointment_id:
             real_id = appointment_id.split('-')[0]
             appointment['id'] = real_id
 
-    # Also process unfilled appointments
-    unfilled_appointments = result.get('unfilled_appointments', [])
-    for appointment in unfilled_appointments:
-        appointment_id = appointment.get('id', '')
-        if '-' in appointment_id:
-            real_id = appointment_id.split('-')[0]
-            appointment['id'] = real_id
+    ## Also process unfilled appointments
+    #unfilled_appointments = result.get('unfilled_appointments', [])
+    #for appointment in unfilled_appointments:
+    #    appointment_id = appointment.get('id', '')
+    #    if '-' in appointment_id:
+    #        real_id = appointment_id.split('-')[0]
+    #        appointment['id'] = real_id
 
     return result
