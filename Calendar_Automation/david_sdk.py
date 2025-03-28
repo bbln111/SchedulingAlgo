@@ -2,11 +2,12 @@ import logging
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-
+from appointment_scheduler import export_schedule_to_html
 # Import the new scheduler instead of the old one
 from appointment_scheduler import schedule_appointments as ortools_scheduler
 
 logger = logging.getLogger(__name__)
+HTML_REPORT_PATH = "../logs/scheduling_report.html"
 
 
 def run_on_file(input_file_path):
@@ -38,6 +39,12 @@ def run_on_file(input_file_path):
 
         # Run the appointment scheduler (OR-Tools version)
         appointments, availabilities = ortools_scheduler(input_file_path, max_street_gap=30)
+        with open(input_file_path, 'r') as f:
+            data = json.load(f)
+        start_date = datetime.strptime(data['start_date'], '%Y-%m-%d')
+        export_schedule_to_html(appointments, availabilities, HTML_REPORT_PATH, start_date)
+        # Create HTML report
+
 
         # Convert scheduler output format to the format expected by the existing system
         result = convert_scheduler_output(appointments, input_file_path)

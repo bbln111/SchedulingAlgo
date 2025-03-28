@@ -6,8 +6,8 @@ from get_input_flow import collect_input_from_monday
 from david_sdk import run_on_file  # This will now use the appointment_scheduler.py
 from write_to_monday_flow import write_to_monday
 from etc_functions import should_rerun, unite_output_from_script
-from visualization import generate_html_visualization
-from sample_generator import generate_sample_input
+#from visualization import generate_html_visualization
+#from sample_generator import generate_sample_input
 
 
 RERUN_HARD_LIMIT = 1
@@ -105,7 +105,7 @@ def main():
 
         if not args.no_html:
             html_file = output_file.rsplit('.', 1)[0] + '.html'
-            generate_html_visualization(output_from_script, html_file)
+            #generate_html_visualization(output_from_script, html_file)
             logger.info(f"HTML visualization saved to {html_file}")
 
     # Only write to Monday if not in test mode
