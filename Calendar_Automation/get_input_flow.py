@@ -23,6 +23,13 @@ GOT_AVAIlABILITIES_INDEX = 8
 #    except Exception:
 #        return False, None
 
+def split_time(time):
+    hour, minute = None, None
+    time_map = [i for i in map(int, time.split(':'))]
+    return time_map[0], time_map[1]
+
+
+
 def parse_time(value: str):
     logger.info(value)
     # Remove extra quotes -> "9:00-12:00"
@@ -31,8 +38,8 @@ def parse_time(value: str):
     # Split into start/end -> ["9:00", "12:00"]
     start_str, end_str = value_temp.split('-')
     # Parse hours, minutes
-    start_hour, start_minute, _ = map(int, start_str.split(':'))
-    end_hour, end_minute, _ = map(int, end_str.split(':'))
+    start_hour, start_minute = split_time(start_str)
+    end_hour, end_minute = split_time(end_str)
 
     # Create timedelta objects from midnight
     start_td = datetime.timedelta(hours=start_hour, minutes=start_minute)
