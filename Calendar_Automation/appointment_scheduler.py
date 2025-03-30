@@ -1915,7 +1915,6 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             """
 
             # Sort appointments by start time
-            # In export_schedule_to_html function, where appointments are displayed
             for appt in sorted(appointments, key=lambda x: x['start_time']):
                 session_type = appt['type']
                 client_id = appt['client_id']
@@ -1937,6 +1936,13 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
                             <td>{appt['duration']} min</td>
                         </tr>
                 """
+
+            # ADD THESE CLOSING TAGS AFTER PROCESSING EACH DAY'S APPOINTMENTS
+            html_content += """
+                    </tbody>
+                </table>
+            </div>
+            """
     else:
         html_content += """
         <div class="empty-message">
