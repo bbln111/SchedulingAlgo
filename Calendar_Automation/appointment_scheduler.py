@@ -80,6 +80,21 @@ def our_weekday_to_python_weekday(our_weekday):
     return (our_weekday - 1) % 7
 
 
+def get_client_id(composite_id):
+    """Extract the client ID from a composite ID (client_id-meeting_id)."""
+    return composite_id.split('-')[0] if '-' in composite_id else composite_id
+
+
+def get_meeting_id(composite_id):
+    """Extract the meeting ID from a composite ID (client_id-meeting_id)."""
+    return composite_id.split('-')[1] if '-' in composite_id else '1'
+
+
+def is_same_client(id1, id2):
+    """Check if two IDs refer to the same client."""
+    return get_client_id(id1) == get_client_id(id2)
+
+
 def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_day=270):
     """Schedule appointments based on constraints and client availability.
 
@@ -360,12 +375,19 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
     appointment_vars = {}
     appointment_day_vars = {}
     appointment_scheduled_vars = {}
+    base_client_ids = {}
 
     for client in client_availabilities:
         client_id = client['id']
+        base_client_id = get_client_id(client_id)
         print(f"DEBUG: Processing client {client_id} with {len(client['availabilities'])} availability slots")
         for start, end, day_number in client['availabilities']:
             print(f"DEBUG: Availability slot: day {day_number}, start {start}, end {end}")
+
+        if base_client_id not in base_client_ids:
+            base_client_ids[base_client_id] = []
+
+        base_client_ids[base_client_id].append(client_id)
 
         # Create a variable for the start time of the appointment
         appointment_vars[client_id] = model.NewIntVar(0, horizon_minutes, f'start_{client_id}')
@@ -396,6 +418,42 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         model.AddBoolOr(availability_literals).OnlyEnforceIf(appointment_scheduled_vars[client_id])
         model.AddBoolAnd([lit.Not() for lit in availability_literals]).OnlyEnforceIf(
             appointment_scheduled_vars[client_id].Not())
+
+    print(f"\n=== Creating same-client-day constraints ===")
+    for base_client_id, client_ids in base_client_ids.items():
+        # If this client has multiple potential appointments
+        if len(client_ids) > 1:
+            print(f"Client {base_client_id} has {len(client_ids)} potential appointments")
+
+            # For each day
+            for day in range(7):
+                # Skip Saturday (day 6) as it's not a working day
+                if day == 6:
+                    continue
+
+                # Create variables to track if each appointment is scheduled on this day
+                day_appointments = []
+
+                for client_id in client_ids:
+                    # Create a boolean variable indicating if this client_id is scheduled on this day
+                    is_scheduled_on_day = model.NewBoolVar(f'client_{client_id}_on_day_{day}')
+
+                    # This client is scheduled on this day if they are scheduled and the day matches
+                    model.Add(appointment_day_vars[client_id] == day).OnlyEnforceIf(is_scheduled_on_day)
+                    model.Add(appointment_day_vars[client_id] != day).OnlyEnforceIf(is_scheduled_on_day.Not())
+
+                    # This is only valid if the client is actually scheduled
+                    model.AddImplication(is_scheduled_on_day, appointment_scheduled_vars[client_id])
+
+                    day_appointments.append(is_scheduled_on_day)
+
+                # Now constraint: at most one appointment for this client on this day
+                if day_appointments:
+                    at_most_one = model.Add(sum(day_appointments) <= 1)
+                    print(
+                        f"  Added constraint: at most one appointment for client {base_client_id} "
+                        f"on day {day_number_to_name(day)}"
+                    )
 
     # Create arrays to track street sessions per day
     days_with_streets = {}
@@ -588,6 +646,7 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
         client1_id = client1['id']
         client1_duration = client1['duration']
         client1_type = client1['type']
+        client1_base_id = get_client_id(client1_id)  # Get base client ID
 
         for j, client2 in enumerate(client_availabilities):
             if i >= j:
@@ -596,6 +655,7 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
             client2_id = client2['id']
             client2_duration = client2['duration']
             client2_type = client2['type']
+            client2_base_id = get_client_id(client2_id)  # Get base client ID
 
             # Create boolean variables to represent the two cases of non-overlap
             client1_before_client2 = model.NewBoolVar(f'{client1_id}_before_{client2_id}')
@@ -616,6 +676,19 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
             model.AddBoolOr([appointment_scheduled_vars[client1_id].Not(),
                              appointment_scheduled_vars[client2_id].Not()]).OnlyEnforceIf(both_scheduled.Not())
 
+            # Special case: If these are the same client (different meeting IDs),
+            # ensure a minimum gap even if they have different appointment types
+            same_client = client1_base_id == client2_base_id
+            if same_client:
+                # Create a variable to represent this condition
+                is_same_client_var = model.NewBoolVar(f'same_client_{client1_id}_{client2_id}')
+                model.Add(is_same_client_var == 1)  # Always true for same client
+
+                # Ensure minimum buffer between appointments for same client
+                # You might want to increase the buffer for the same client's different appointments
+                same_client_buffer = 30  # 30 minutes between appointments for the same client
+                required_break = max(required_break, same_client_buffer)
+
             # If both are scheduled, ensure they don't overlap
             model.Add(
                 appointment_vars[client1_id] + client1_duration + required_break <= appointment_vars[client2_id]
@@ -634,16 +707,22 @@ def schedule_appointments(json_file, max_street_gap=30, max_street_minutes_per_d
     for client in client_availabilities:
         client_id = client['id']
         priority = client['priority']
-        # Prioritize client by priority value and add a small weight for lower client IDs
-        # This ensures deterministic behavior when clients have identical constraints
+        # Get the base client ID for weight calculations
+        base_client_id = get_client_id(client_id)
 
-        client_index = next((i for i, c in enumerate(client_availabilities) if c['id'] == client_id), 0)
+        # Find the first index of any appointment with this base client ID
+        # This ensures that different meetings of the same client have the same weight
+        client_index = next((i for i, c in enumerate(client_availabilities)
+                             if get_client_id(c['id']) == base_client_id), 0)
+
         objective_terms.append(appointment_scheduled_vars[client_id] * priority * 100)  # Weight by priority
         # Small preference based on index
         objective_terms.append(appointment_scheduled_vars[client_id] * (-client_index * 0.1))
+
         print(f"DEBUG: Client ID processing")
         print(f"  Original client_id: {client_id}")
-        print(f"  Converted to int: {client_index}")
+        print(f"  Base client_id: {base_client_id}")
+        print(f"  Client index: {client_index}")
         print(f"  Weight in objective: {(-client_index * 0.1)}")
 
     # Maximize the number of days with at least 2 street sessions
@@ -1281,6 +1360,32 @@ def validate_schedule(appointments, min_break=15, zoom_streets_break=75,
                                    f"{appt2['start_time']}-{appt2['end_time']}"
                     })
 
+    # Check: Same client should not have multiple appointments on the same day
+    client_day_counts = {}
+    for appt in appointments:
+        client_id = appt['client_id']
+        day = appt['date']
+        base_client_id = get_client_id(client_id)
+
+        key = f"{base_client_id}_{day}"
+
+        if key not in client_day_counts:
+            client_day_counts[key] = []
+
+        client_day_counts[key].append(client_id)
+
+    # Check for violations
+    for key, client_ids in client_day_counts.items():
+        if len(client_ids) > 1:
+            base_client_id, day = key.split('_', 1)
+            result["valid"] = False
+            result["violations"].append({
+                "constraint": "one_appointment_per_client_per_day",
+                "description": f"Client {base_client_id} has multiple appointments on {day}: {', '.join(client_ids)}",
+                "expected": "1",
+                "actual": str(len(client_ids))
+            })
+
     return result
 
 
@@ -1812,16 +1917,27 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             # Sort appointments by start time
             for appt in sorted(appointments, key=lambda x: x['start_time']):
                 session_type = appt['type']
+                client_id = appt['client_id']
+                base_client_id = get_client_id(client_id)
+                meeting_id = get_meeting_id(client_id)
+
+                # Display client and meeting info clearly
+                if '-' in client_id:
+                    client_display = f"{base_client_id} <small>(Meeting {meeting_id})</small>"
+                else:
+                    client_display = client_id
+
                 html_content += f"""
                         <tr class="{session_type}">
                             <td>{appt['start_time']}</td>
                             <td>{appt['end_time']}</td>
-                            <td>{appt['client_id']}</td>
+                            <td>{client_display}</td>
                             <td><span class="badge badge-{session_type}">{session_type}</span></td>
                             <td>{appt['duration']} min</td>
                         </tr>
                 """
 
+            # ADD THESE CLOSING TAGS AFTER PROCESSING EACH DAY'S APPOINTMENTS
             html_content += """
                     </tbody>
                 </table>
