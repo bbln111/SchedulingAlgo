@@ -1,18 +1,11 @@
 import json
 import datetime
-
-start_day = "2025-02-16"
-times = ['"9:00-12:00"', None, None, None, None, None, None]
-
-
-
 import requests
+from constants import MONDAY_URL, MONDAY_API_KEY
 BOARD_ID = 1563336497
 
-url = "https://api.monday.com/v2"
-
-API_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQzNDY0NDY5OCwiYWFpIjoxMSwidWlkIjo2MzQ0MzI4MCwiaWFkIjoiMjAyNC0xMS0xMFQwOTo0MzoxNi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MjQ0MTMxODUsInJnbiI6ImV1YzEifQ.EjiCaRi_3RiHpQIH8SXCIiowwuqc1QbVNjyHZMK6who"
-
+url = MONDAY_URL
+API_KEY = MONDAY_API_KEY
 
 
 class ParserFriend:

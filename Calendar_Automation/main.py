@@ -1,18 +1,16 @@
-import uuid
 import logging
 import argparse
+import os
 
 from get_input_flow import collect_input_from_monday
-from david_sdk import run_on_file  # This will now use the appointment_scheduler.py
+from david_sdk import run_on_file
 from write_to_monday_flow import write_to_monday
 from etc_functions import should_rerun, unite_output_from_script
-#from visualization import generate_html_visualization
-#from sample_generator import generate_sample_input
+from constants import RUN_ID,RUN_LOGS_DIR_PATH, LOG_FILE_PATH, OUTPUT_DUMP, RERUN_HARD_LIMIT
 
 
-RERUN_HARD_LIMIT = 1
-RUN_ID = str(uuid.uuid4())
-LOG_FILE_PATH = fr'..\logs\Calendar_Automation\log_file_{RUN_ID}.log'
+print(f"==================RUN_ID: {RUN_ID}============================")
+os.makedirs(RUN_LOGS_DIR_PATH, exist_ok=True)
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +19,8 @@ def configure_logging():
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         filename=LOG_FILE_PATH,
-        filemode='w+'
+        filemode='w+',
+        encoding='utf-8'
     )
 
 
@@ -102,7 +101,8 @@ def main():
         output_file = args.output_file or 'test_results.json'
         save_results_to_file(output_from_script, output_file)
         logger.info(f"Results saved to {output_file}")
-
+        save_results_to_file(output_from_script, OUTPUT_DUMP)
+        logger.info(f"Results saved to {OUTPUT_DUMP}")
         if not args.no_html:
             html_file = output_file.rsplit('.', 1)[0] + '.html'
             #generate_html_visualization(output_from_script, html_file)
@@ -119,8 +119,8 @@ def main():
 
 if __name__ == '__main__':
     try:
-        print("started")
+        print(f"==================RUN_ID: {RUN_ID}============================")
         main()
-        print("finished")
+        print(f"==================RUN_ID: {RUN_ID}============================")
     except Exception as e:
         logger.error(f"Error in main function: {e}")
