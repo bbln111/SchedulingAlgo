@@ -60,6 +60,8 @@ def _parse_location(big_dict: dict):
 
     locations_by_index = {
         0: "streets",
+        1: "trial_streets",
+        2: "trial_zoom",
         3: "zoom",
     }
     if index not in locations_by_index:
