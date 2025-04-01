@@ -25,4 +25,10 @@ KEY_DAYS_REQUESTED = 'numeric_mknnxrbp'
 DEFAULT_REQUESTED_DAYS = 1
 GOT_AVAIlABILITIES_INDEX = 8
 
+TIME_PER_LOCATION = {
+    "streets": 60,
+    "zoom": 60,
+    "trial_streets": 2 * 60,
+    "trial_zoom": 2 * 60,
+}
 
