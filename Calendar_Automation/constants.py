@@ -15,7 +15,7 @@ RUN_LOGS_DIR_PATH = os.path.join(LOGS_DIR_PATH, RUN_ID)
 LOG_FILE_PATH = os.path.join(RUN_LOGS_DIR_PATH, 'log_file.log')
 HTML_REPORT_PATH = os.path.join(RUN_LOGS_DIR_PATH, 'scheduling_report.html')
 INPUT_DUMP = os.path.join(RUN_LOGS_DIR_PATH, 'input_dump')
-OUTPUT_DUMP = os.path.join(RUN_LOGS_DIR_PATH, 'output_dump')
+OUTPUT_DUMP = os.path.join(RUN_LOGS_DIR_PATH, 'output_dump.json')
 
 DATE_KEY = 'date0'
 TIME_KEY = 'hour__1'

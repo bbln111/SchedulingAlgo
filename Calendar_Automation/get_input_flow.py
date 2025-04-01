@@ -6,13 +6,9 @@ from constants import INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED
 
 logger = logging.getLogger(__name__)
 
-BOARD_ID = MONDAY_BOARD_ID#1563336497
-url = MONDAY_URL #"https://api.monday.com/v2"
-api_key = MONDAY_API_KEY # "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQzNDY0NDY5OCwiYWFpIjoxMSwidWlkIjo2MzQ0MzI4MCwiaWFkIjoiMjAyNC0xMS0xMFQwOTo0MzoxNi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MjQ0MTMxODUsInJnbiI6ImV1YzEifQ.EjiCaRi_3RiHpQIH8SXCIiowwuqc1QbVNjyHZMK6who"
-
-#KEY_DAYS_REQUESTED = 'numeric_mknnxrbp'
-#DEFAULT_REQUESTED_DAYS = 1
-#GOT_AVAIlABILITIES_INDEX = 8
+BOARD_ID = MONDAY_BOARD_ID
+url = MONDAY_URL
+api_key = MONDAY_API_KEY
 
 
 def split_time(time):
@@ -296,7 +292,7 @@ def convent_to_input_file_format(monday_dict: dict):
 
         if days_list is None: # כפיר מוכתרי
             continue
-        logger.info(f"name: {name} \t start_date: {start_date} \t days_list: {days_list} \t requested_amount: {requested_amount}, location: {location}")
+        logger.info(f"name: {name} \t id: {id}\t start_date: {start_date} \t days_list: {days_list} \t requested_amount: {requested_amount}, location: {location}")
         fixed_days_list = authistic_day_list_fix(days_list)
         logger.info(f"fixed_days_list: {fixed_days_list}")
 
