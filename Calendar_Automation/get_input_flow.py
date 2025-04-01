@@ -201,7 +201,7 @@ def get_timespans_raw():
                         save_dictionary[client_id] = {"name": client_name, date: days_list, "requested_amount": requested_amount, "location": location }
                     else:
                         save_dictionary[client_id][date] = days_list
-                #duplicate_client(save_dictionary, client_id, requested_amount)
+                duplicate_client(save_dictionary, client_id, requested_amount)
     return save_dictionary
 
 def parse_time_frame(start_date, times_string, day_index):
