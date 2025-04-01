@@ -5,6 +5,7 @@ import logging
 from constants import (
     INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED,
     DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID, TIME_PER_LOCATION)
+from get_from_google_calendar import get_meetings_from_google_calendar
 
 logger = logging.getLogger(__name__)
 
@@ -214,10 +215,10 @@ def parse_time_frame(start_date, times_string, day_index):
     return_dict = {"start": start_formatted, "end": end_formatted}
     return return_dict
 
-def save_to_files(data_dict: dict, file_path: str):
+def save_to_files(data_dict: dict, file_path: str, meetings_from_google:list):
     for start_date in data_dict.keys():
         appointments = data_dict[start_date]
-        data_to_file = {"start_date": start_date, "appointments": appointments}
+        data_to_file = {"start_date": start_date, "appointments": appointments, "blockers": meetings_from_google}
         output_file_name = f"{file_path}_{start_date}.json"
         with open(output_file_name, "w", encoding="utf-8") as f:
             json.dump(data_to_file, f, ensure_ascii=False, indent=2)
@@ -351,14 +352,19 @@ def filter_out_empty_entries(data_dict: dict):
 def collect_input_from_monday(input_file):
     logger.info("starting to collect input from monday")
     raw_dict = get_timespans_raw()
+    if raw_dict is None or raw_dict is {}:
+        print("NO MEETINGS")
+        logger.info("NO MEETINGS")
+
     logger.info("formatting timespans")
     formatted_dict = convent_to_input_file_format(raw_dict)
     logger.info("formatting filtering")
     filtered_dict = filter_out_empty_entries(formatted_dict)
     logger.info("formatting finished")
-    output_file = save_to_files(filtered_dict, input_file)
+    meetings_from_google = get_meetings_from_google_calendar()
+    output_file = save_to_files(filtered_dict, input_file, meetings_from_google)
     logger.info(f"saved to file {output_file}")
-    dump = save_to_files(filtered_dict, INPUT_DUMP)
+    dump = save_to_files(filtered_dict, INPUT_DUMP, meetings_from_google)
     logger.info(f"saved dump to file {dump}")
     return output_file
 
