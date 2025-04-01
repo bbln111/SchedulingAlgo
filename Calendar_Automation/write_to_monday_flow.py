@@ -4,17 +4,15 @@ import moday_api_sdk
 import logging
 from datetime import datetime as datetime_
 from moday_api_sdk import Client, MondayApi
+from constants import  MONDAY_URL, MONDAY_API_KEY ,MONDAY_BOARD_ID, DATE_KEY, TIME_KEY, STATUS_KEY, STATUS_VALUE_SCHEDULED
 
 logger = logging.getLogger(__name__)
 
-DATE_KEY = 'date0'
-TIME_KEY = 'hour__1'
-STATUS_KEY = 'status'
-STATUS_VALUE_SCHEDULED = 'אלגוריתם שיבץ'
-BIG_BOARD_ID = 1563336497
-url = "https://api.monday.com/v2"
-API_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQzNDY0NDY5OCwiYWFpIjoxMSwidWlkIjo2MzQ0MzI4MCwiaWFkIjoiMjAyNC0xMS0xMFQwOTo0MzoxNi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MjQ0MTMxODUsInJnbiI6ImV1YzEifQ.EjiCaRi_3RiHpQIH8SXCIiowwuqc1QbVNjyHZMK6who"
-MondayApi = MondayApi(api_key=API_KEY, url=url, main_board_id=BIG_BOARD_ID)
+BIG_BOARD_ID = MONDAY_BOARD_ID
+url = MONDAY_URL
+API_KEY = MONDAY_API_KEY
+MondayApi = (
+    MondayApi(api_key=API_KEY, url=url, main_board_id=BIG_BOARD_ID))
 headers = {
     "Authorization": API_KEY,
     "Content-Type": "application/json"
@@ -36,29 +34,6 @@ def get_query_for_client(board_id, item_id, column_id, value):
     """
     return query
 
-
-
-
-'''
-def _update_date_from_client2(board_id, client_id, value):
-    # Validate the input date format
-    try:
-        date_value = datetime_.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        raise ValueError(f"Invalid date format: {value}. Expected format: YYYY-MM-DD")
-
-    # Create the JSON object for GraphQL `value`
-    formatted_value = {
-        "date": str(date_value),  # "YYYY-MM-DD"
-        "time": "00:00:00"
-    }
-
-    # Convert to a properly escaped string for GraphQL
-    json_payload = json.dumps(formatted_value)  # Correctly formats and escapes JSON
-
-    # Call the function with properly formatted JSON
-    return _update_meeting_for_client(board_id, client_id, DATE_KEY, json_payload)
-'''
 
 def _update_date_from_client(board_id, client_id, value):
     return_code = _update_meeting_for_client(board_id, client_id, DATE_KEY, f"{{\\\"date\\\": \\\"{value}\\\"}}")
@@ -105,8 +80,6 @@ def update_client_meeting(board_id, client_id, date, time):
 
 
 def _parse_filled_appointment(appointment):
-    #end_time = appointment.get("end_time")
-    #type_ = appointment.get("type")
 
     client_id = appointment.get("id")
     start_time = appointment.get("start_time")
@@ -168,22 +141,12 @@ def write_to_monday(data):
     appointments = _get_appointments(data)
 
     monday_api = moday_api_sdk.MondayApi(api_key=API_KEY, url=url, main_board_id=str(BIG_BOARD_ID))
-    #clients = monday_api.get_clients()
 
     sorted_appointments = sort_appointment_by_client(appointments)
 
     for client_id in sorted_appointments.keys():
         client_appointment = sorted_appointments[client_id]
         update_client_appointments(client_id, client_appointment, monday_api)
-
-
-    #for date, time, client_id in appointments:
-    #    client = find_client_with_id(str(client_id), clients) # TODO change client_id to string
-    #    meeting = find_meeting_with_date(client, date)
-    #    meeting_board_id = meeting.board_id
-    #    client_meetings = monday_api.get_meetings(client_id)
-#
-    #    update_client_meeting(meeting_board_id, meeting.id, date, time)
 
 
 if __name__ == '__main__':

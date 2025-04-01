@@ -2,26 +2,14 @@ import datetime
 import json
 import requests
 import logging
+from constants import INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED, DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID
 
 logger = logging.getLogger(__name__)
 
-BOARD_ID = 1563336497
-url = "https://api.monday.com/v2"
-api_key = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQzNDY0NDY5OCwiYWFpIjoxMSwidWlkIjo2MzQ0MzI4MCwiaWFkIjoiMjAyNC0xMS0xMFQwOTo0MzoxNi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MjQ0MTMxODUsInJnbiI6ImV1YzEifQ.EjiCaRi_3RiHpQIH8SXCIiowwuqc1QbVNjyHZMK6who"
+BOARD_ID = MONDAY_BOARD_ID
+url = MONDAY_URL
+api_key = MONDAY_API_KEY
 
-KEY_DAYS_REQUESTED = 'numeric_mknnxrbp'
-DEFAULT_REQUESTED_DAYS = 1
-GOT_AVAIlABILITIES_INDEX = 8
-
-
-#def try_parse_as_date(value: str):
-#    try:
-#        date_parts = value.strip().split('-')
-#        if len(date_parts) != 2:
-#            raise ValueError("Invalid date format :: 1")
-#
-#    except Exception:
-#        return False, None
 
 def split_time(time):
     hour, minute = None, None
@@ -304,7 +292,7 @@ def convent_to_input_file_format(monday_dict: dict):
 
         if days_list is None: # כפיר מוכתרי
             continue
-        logger.info(f"name: {name} \t start_date: {start_date} \t days_list: {days_list} \t requested_amount: {requested_amount}, location: {location}")
+        logger.info(f"name: {name} \t id: {id}\t start_date: {start_date} \t days_list: {days_list} \t requested_amount: {requested_amount}, location: {location}")
         fixed_days_list = authistic_day_list_fix(days_list)
         logger.info(f"fixed_days_list: {fixed_days_list}")
 
@@ -359,6 +347,8 @@ def collect_input_from_monday(input_file):
     logger.info("formatting finished")
     output_file = save_to_files(filtered_dict, input_file)
     logger.info(f"saved to file {output_file}")
+    dump = save_to_files(filtered_dict, INPUT_DUMP)
+    logger.info(f"saved dump to file {dump}")
     return output_file
 
 
