@@ -2,7 +2,9 @@ import datetime
 import json
 import requests
 import logging
-from constants import INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED, DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID
+from constants import (
+    INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED,
+    DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID, TIME_PER_LOCATION)
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,8 @@ def _parse_location(big_dict: dict):
 
     locations_by_index = {
         0: "streets",
+        1: "trial_streets",
+        2: "trial_zoom",
         3: "zoom",
     }
     if index not in locations_by_index:
@@ -263,14 +267,19 @@ def authistic_day_list_fix(days_list: list):
     logger.info(ret_list)
     return ret_list
 
+def calculate_time_by_location(location, default_time = 60):
+    if location is None:
+        logger.error(f"laction was null, using default {default_time}")
+        return default_time
+    return TIME_PER_LOCATION.get(location)
+
+
 def convent_to_input_file_format(monday_dict: dict):
     return_dict = {}
     DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     for key in monday_dict.keys():
         id = key #int(key)
         priority = "High"
-        type__r = "zoom"
-        time = 60
         raw_dict = dict(monday_dict[key])
 
         name, start_date, days_list = None, None, None
@@ -292,7 +301,9 @@ def convent_to_input_file_format(monday_dict: dict):
 
         if days_list is None: # כפיר מוכתרי
             continue
-        logger.info(f"name: {name} \t id: {id}\t start_date: {start_date} \t days_list: {days_list} \t requested_amount: {requested_amount}, location: {location}")
+        time = calculate_time_by_location(location)
+        logger.info(f"name: {name} \t id: {id}\t start_date: {start_date} \t days_list: {days_list} \t "
+                    f"requested_amount: {requested_amount}, \t location: {location}, \t time: {time}")
         fixed_days_list = authistic_day_list_fix(days_list)
         logger.info(f"fixed_days_list: {fixed_days_list}")
 

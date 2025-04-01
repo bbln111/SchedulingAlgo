@@ -1,14 +1,11 @@
 import logging
 import json
-import os.path
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from appointment_scheduler import export_schedule_to_html
-# Import the new scheduler instead of the old one
 from appointment_scheduler import schedule_appointments as ortools_scheduler
 from constants import HTML_REPORT_PATH
 logger = logging.getLogger(__name__)
-#HTML_REPORT_PATH = f"../logs/scheduling_report.html"
 
 def run_on_file(input_file_path):
     """
