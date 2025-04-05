@@ -4,7 +4,8 @@ import requests
 import logging
 from constants import (
     INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED,
-    DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID, TIME_PER_LOCATION)
+    DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID, TIME_PER_LOCATION,
+    RUN_TIME_CONSTANTS, ID_2_NAME_KEY)
 from get_from_google_calendar import get_meetings_from_google_calendar
 
 logger = logging.getLogger(__name__)
@@ -278,14 +279,14 @@ def calculate_time_by_location(location, default_time = 60):
 def convent_to_input_file_format(monday_dict: dict):
     return_dict = {}
     DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    id_2_name_dict = RUN_TIME_CONSTANTS[ID_2_NAME_KEY]
+
     for key in monday_dict.keys():
-        id = key #int(key)
+        id = key
         priority = "High"
         raw_dict = dict(monday_dict[key])
 
         name, start_date, days_list = None, None, None
-
-
 
         for key in raw_dict.keys():
             if key is None:
@@ -303,6 +304,8 @@ def convent_to_input_file_format(monday_dict: dict):
         if days_list is None: # כפיר מוכתרי
             continue
         time = calculate_time_by_location(location)
+
+        id_2_name_dict[id] = name
         logger.info(f"name: {name} \t id: {id}\t start_date: {start_date} \t days_list: {days_list} \t "
                     f"requested_amount: {requested_amount}, \t location: {location}, \t time: {time}")
         fixed_days_list = authistic_day_list_fix(days_list)
@@ -329,6 +332,8 @@ def convent_to_input_file_format(monday_dict: dict):
 
         logger.info(return_dict)
 
+    logger.info("========Id to name_dict:============")
+    logger.info(id_2_name_dict)
 
     return return_dict
 
