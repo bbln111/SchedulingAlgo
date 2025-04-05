@@ -2,6 +2,7 @@ from ortools.sat.python import cp_model
 import json
 from datetime import datetime, timedelta
 import argparse
+from constants import RUN_TIME_CONSTANTS, ID_2_NAME_KEY
 
 
 def parse_time(time_str):
@@ -1906,6 +1907,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
                         <tr>
                             <th>Start Time</th>
                             <th>End Time</th>
+                            <th>Client Name</th>
                             <th>Client ID</th>
                             <th>Session Type</th>
                             <th>Duration</th>
@@ -1918,6 +1920,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             for appt in sorted(appointments, key=lambda x: x['start_time']):
                 session_type = appt['type']
                 client_id = appt['client_id']
+                client_name = RUN_TIME_CONSTANTS[ID_2_NAME_KEY][client_id]
                 base_client_id = get_client_id(client_id)
                 meeting_id = get_meeting_id(client_id)
 
@@ -1931,6 +1934,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
                         <tr class="{session_type}">
                             <td>{appt['start_time']}</td>
                             <td>{appt['end_time']}</td>
+                            <td>{client_name}</td>
                             <td>{client_display}</td>
                             <td><span class="badge badge-{session_type}">{session_type}</span></td>
                             <td>{appt['duration']} min</td>
@@ -1960,6 +1964,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             <table>
                 <thead>
                     <tr>
+                        <th>Client Name</th>
                         <th>Client ID</th>
                         <th>Session Type</th>
                         <th>Priority</th>
@@ -1969,9 +1974,12 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
         """
 
         for client in sorted(unscheduled_clients, key=lambda x: x['id']):
+            unscheduled_client_id = client['id']
+            unscheduled_client_name =  RUN_TIME_CONSTANTS[ID_2_NAME_KEY][unscheduled_client_id]
             html_content += f"""
                     <tr>
-                        <td>{client['id']}</td>
+                        <td>{unscheduled_client_name}</td>
+                        <td>{unscheduled_client_id}</td>
                         <td><span class="badge badge-{client['type']}">{client['type']}</span></td>
                         <td>{client['priority']}</td>
                     </tr>
@@ -1993,7 +2001,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
     """
 
     # Write to file
-    with open(output_file, 'w') as f:
+    with open(output_file, 'w', encoding="utf-8") as f:
         f.write(html_content)
 
     print(f"HTML schedule report exported to {output_file}")

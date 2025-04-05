@@ -32,3 +32,9 @@ TIME_PER_LOCATION = {
     "trial_zoom": 2 * 60,
 }
 
+ID_2_NAME_KEY = 'id_2_name'
+
+RUN_TIME_CONSTANTS = {
+    ID_2_NAME_KEY:{}
+}
+

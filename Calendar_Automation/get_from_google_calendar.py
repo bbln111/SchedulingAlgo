@@ -1,8 +1,9 @@
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from datetime import datetime, timedelta, date, timezone
 import os
-from datetime import datetime, timedelta, date
 
 # If modifying these SCOPES, delete token.json
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
@@ -45,7 +46,8 @@ def _get_meetings_from_google_calendar():
     service = build('calendar', 'v3', credentials=creds)
 
     # Get upcoming 10 events
-    now = datetime.utcnow().isoformat() + 'Z'
+    now = datetime.now(timezone.utc).isoformat()
+
     events_result = service.events().list(
         calendarId='primary', timeMin=now,
         maxResults=100, singleEvents=True,
@@ -85,6 +87,7 @@ def get_meetings_from_google_calendar():
 
 def main():
     ret_list = get_meetings_from_google_calendar()
+    print(ret_list)
 
 if __name__ == '__main__':
     main()
