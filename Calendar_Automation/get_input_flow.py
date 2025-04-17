@@ -30,8 +30,13 @@ def parse_time(value: str):
     # Split into start/end -> ["9:00", "12:00"]
     start_str, end_str = value_temp.split('-')
     # Parse hours, minutes
-    start_hour, start_minute = split_time(start_str)
-    end_hour, end_minute = split_time(end_str)
+    start_as_datetime = try_parse_time(start_str)
+    end_as_datetime = try_parse_time(end_str)
+    if start_as_datetime is None or end_as_datetime is None:
+        raise Exception('Invalid start and end time')
+
+    start_hour, start_minute = start_as_datetime.hour, start_as_datetime.minute #split_time(start_str)
+    end_hour, end_minute = end_as_datetime.hour, end_as_datetime.minute #split_time(end_str)
 
     # Create timedelta objects from midnight
     start_td = datetime.timedelta(hours=start_hour, minutes=start_minute)
@@ -226,7 +231,7 @@ def save_to_files(data_dict: dict, file_path: str, meetings_from_google: list = 
         return output_file_name
 
 def try_parse_time(time_as_string):
-    formats = ["%H:%M:%S", "%H:%M"]
+    formats = ["%H:%M:%S", "%H:%M", "%H"]
     for format in formats:
         try:
             ret_date = datetime.datetime.strptime(time_as_string, format)
