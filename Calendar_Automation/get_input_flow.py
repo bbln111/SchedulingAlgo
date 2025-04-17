@@ -5,7 +5,7 @@ import logging
 from constants import (
     INPUT_DUMP, MONDAY_URL, MONDAY_API_KEY, KEY_DAYS_REQUESTED,
     DEFAULT_REQUESTED_DAYS, GOT_AVAIlABILITIES_INDEX, MONDAY_BOARD_ID, TIME_PER_LOCATION,
-    RUN_TIME_CONSTANTS, ID_2_NAME_KEY)
+    RUN_TIME_CONSTANTS, ID_2_NAME_KEY, FEATURE_FLAG_GOOGLE_CALENDAR_ENABLED)
 from get_from_google_calendar import get_meetings_from_google_calendar
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ def get_timespans_raw():
                     for col in subitem.get("column_values", [])
                 }
                 status = _parse_status(columns_dict)
-                if status != GOT_AVAIlABILITIES_INDEX:
+                if status != GOT_AVAIlABILITIES_INDEX: #and status != ALGORITHM_HAS_SCHEDULED_INDEX:
                     continue
 
                 date, days_list, has_timespan, requested_amount, location = parse_column_dict(columns_dict)
@@ -216,7 +216,7 @@ def parse_time_frame(start_date, times_string, day_index):
     return_dict = {"start": start_formatted, "end": end_formatted}
     return return_dict
 
-def save_to_files(data_dict: dict, file_path: str, meetings_from_google:list):
+def save_to_files(data_dict: dict, file_path: str, meetings_from_google: list = []):
     for start_date in data_dict.keys():
         appointments = data_dict[start_date]
         data_to_file = {"start_date": start_date, "appointments": appointments, "blockers": meetings_from_google}
@@ -366,7 +366,10 @@ def collect_input_from_monday(input_file):
     logger.info("formatting filtering")
     filtered_dict = filter_out_empty_entries(formatted_dict)
     logger.info("formatting finished")
-    meetings_from_google = get_meetings_from_google_calendar()
+    meetings_from_google = [] # default
+    if FEATURE_FLAG_GOOGLE_CALENDAR_ENABLED:
+        logger.info("google calendar enabled")
+        meetings_from_google = get_meetings_from_google_calendar()
     output_file = save_to_files(filtered_dict, input_file, meetings_from_google)
     logger.info(f"saved to file {output_file}")
     dump = save_to_files(filtered_dict, INPUT_DUMP, meetings_from_google)
