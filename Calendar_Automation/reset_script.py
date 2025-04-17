@@ -1,11 +1,12 @@
 import json
-from get_input_flow import get_timespans_raw
 from moday_api_sdk import  MondayApi
 from write_to_monday_flow import _update_status_from_client_slim, _reset_column_value
+import logging
 
 START_STATUS = 11
 FINISH_STATUS_FIRST = 8
 FINISH_STATUS_OTHERS = 2
+logger = logging.getLogger(__name__)
 
 def _reset_subitem_status(subitem, is_first_reset):
     board_id = subitem.get('board').get('id')
@@ -35,10 +36,15 @@ def _get_status(subitem):
             return index
 
 def _run_on_subitem(subitem):
-    status = _get_status(subitem)
-    should_reset = _should_reset(status)
-    print(should_reset)
-    return should_reset
+    try:
+        status = _get_status(subitem)
+        should_reset = _should_reset(status)
+        print(should_reset)
+        return should_reset
+    except Exception as e:
+        print("got exception in status")
+        print(e)
+        return False
 
 
 
@@ -66,7 +72,6 @@ def main():
     BIG_BOARD_ID = 1563336497
     monday_api = MondayApi(api_key=API_KEY, url=url, main_board_id=BIG_BOARD_ID)
     y = monday_api._get_board()
-    x= get_timespans_raw()
     items = _extract_items(y)
     for item in items:
         _run_on_item(item)
