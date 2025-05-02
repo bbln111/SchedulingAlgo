@@ -1920,7 +1920,7 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
             for appt in sorted(appointments, key=lambda x: x['start_time']):
                 session_type = appt['type']
                 client_id = appt['client_id']
-                client_name = RUN_TIME_CONSTANTS[ID_2_NAME_KEY][client_id]
+                client_name = RUN_TIME_CONSTANTS[ID_2_NAME_KEY].get(client_id, f"Unknown ({client_id})")
                 base_client_id = get_client_id(client_id)
                 meeting_id = get_meeting_id(client_id)
 
@@ -1975,7 +1975,9 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
 
         for client in sorted(unscheduled_clients, key=lambda x: x['id']):
             unscheduled_client_id = client['id']
-            unscheduled_client_name =  RUN_TIME_CONSTANTS[ID_2_NAME_KEY][unscheduled_client_id]
+            unscheduled_client_name = RUN_TIME_CONSTANTS[ID_2_NAME_KEY].get(
+                unscheduled_client_id, f"Unknown ({unscheduled_client_id})"
+            )
             html_content += f"""
                     <tr>
                         <td>{unscheduled_client_name}</td>
@@ -2005,6 +2007,112 @@ def export_schedule_to_html(scheduled_appointments, client_availabilities, outpu
         f.write(html_content)
 
     print(f"HTML schedule report exported to {output_file}")
+
+
+def calculate_type_counts(scheduled_appointments, client_availabilities):
+    """Calculate statistics for different session types"""
+    session_types = ['streets', 'trial_streets', 'zoom', 'trial_zoom', 'field']
+    type_counts = {
+        session_type: {
+            'scheduled': 0,
+            'total': 0,
+            'rate': 0.0
+        } for session_type in session_types
+    }
+
+    # Count total for each type
+    for client in client_availabilities:
+        session_type = client['type']
+        if session_type in type_counts:
+            type_counts[session_type]['total'] += 1
+
+    # Count scheduled for each type
+    for appt in scheduled_appointments:
+        session_type = appt['type']
+        if session_type in type_counts:
+            type_counts[session_type]['scheduled'] += 1
+
+    # Calculate rates
+    for session_type in type_counts:
+        total = type_counts[session_type]['total']
+        if total > 0:
+            scheduled = type_counts[session_type]['scheduled']
+            type_counts[session_type]['rate'] = round(scheduled / total, 2)
+        else:
+            type_counts[session_type]['rate'] = 1.0  # If total is 0, set rate to 1.0
+
+    return type_counts
+
+
+def process_scheduler_results(scheduled_appointments, client_availabilities, input_data):
+    """
+    Convert scheduler results to a standardized format used by all output functions.
+
+    Returns:
+        dict: Standardized schedule data structure
+    """
+    # Create the standardized output structure
+    standard_output = {
+        "appointments": [],
+        "unfilled": [],
+        "statistics": {
+            "total": len(client_availabilities),
+            "filled": len(scheduled_appointments),
+            "success_rate": round(
+                len(scheduled_appointments) / len(client_availabilities) * 100 if len(client_availabilities) > 0 else 0)
+        },
+        "type_counts": calculate_type_counts(scheduled_appointments, client_availabilities),
+        "start_date": input_data["start_date"]
+    }
+
+    # Get client names mapping
+    id_to_name = input_data.get("id_to_name", {})
+    if not id_to_name and "ID_2_NAME_KEY" in RUN_TIME_CONSTANTS:
+        id_to_name = RUN_TIME_CONSTANTS["ID_2_NAME_KEY"]
+
+    # Process filled appointments
+    for appt in scheduled_appointments:
+        client_id = appt['client_id']
+        appt_date = appt['date']
+        start_time = appt['start_time']
+        end_time = appt['end_time']
+
+        # Get client name
+        client_name = id_to_name.get(client_id, "Unknown")
+
+        # Create standardized appointment entry
+        standard_appt = {
+            "id": client_id,
+            "name": client_name,
+            "type": appt['type'],
+            "day": appt['day'],
+            "date": appt_date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": appt['duration'],
+            "iso_start": f"{appt_date}T{start_time}:00",
+            "iso_end": f"{appt_date}T{end_time}:00"
+        }
+
+        standard_output["appointments"].append(standard_appt)
+
+    # Process unfilled appointments
+    scheduled_client_ids = set(appt['client_id'] for appt in scheduled_appointments)
+    all_client_ids = set(client['id'] for client in client_availabilities)
+    unscheduled_client_ids = all_client_ids - scheduled_client_ids
+
+    for client_id in unscheduled_client_ids:
+        client_data = next((c for c in client_availabilities if c['id'] == client_id), None)
+        if client_data:
+            client_name = id_to_name.get(client_id, "Unknown")
+            standard_output["unfilled"].append({
+                "id": client_id,
+                "name": client_name,
+                "type": client_data['type'],
+                "priority": client_data.get('priority', "Unknown")
+            })
+
+    return standard_output
 
 
 def main():
@@ -2115,17 +2223,64 @@ def main():
 
     # Export the schedule (even if invalid after all retries)
     if appointments:
-        # Use the new validation-aware export function
-        integrate_with_scheduler(appointments, client_availabilities, args.output)
-        export_schedule_to_html(appointments, client_availabilities, args.html, start_date)
+        # Create a standardized output format (single source of truth)
+        standard_output = process_scheduler_results(appointments, client_availabilities, data)
 
-        # Print a message with links to both files
+        # Create the Monday integration data
+        monday_data = [
+            {
+                "id": appt["id"],
+                "type": appt["type"],
+                "start_time": appt["iso_start"],
+                "end_time": appt["iso_end"]
+            } for appt in standard_output["appointments"]
+        ]
+
+        # Use the existing functions with our standardized data
+        output_data = {
+            "filled_appointments": monday_data,
+            "unfilled_appointments": [
+                {
+                    "id": client["id"],
+                    "type": client["type"]
+                } for client in standard_output["unfilled"]
+            ],
+            "validation": validation_result or {"valid": True, "issues": []},
+            "type_balance": standard_output.get("type_counts", {})
+        }
+
+        # Write JSON output
+        with open(args.output, 'w') as f:
+            json.dump(output_data, f, indent=2)
+
+        # Export HTML report using the SAME data as for JSON/Monday
+        html_compatible_appointments = []
+        for appt in standard_output["appointments"]:
+            html_compatible_appointments.append({
+                'client_id': appt["id"],
+                'type': appt["type"],
+                'day': appt["day"],
+                'date': appt["date"],
+                'start_time': appt["start_time"],
+                'end_time': appt["end_time"],
+                'duration': appt["duration"]
+            })
+
+        export_schedule_to_html(html_compatible_appointments, client_availabilities, args.html, start_date)
+
+        # Write to Monday using the same data
+        print(f"Writing results to Monday with data: {monday_data}")
+        # Here you would call your Monday integration function
+        # write_to_monday(monday_data)  # This would be your existing Monday integration function
+
+        # Print messages
         print(f"\nExports completed:")
         print(f"- JSON: {args.output}")
         print(f"- HTML Report: {args.html}")
+        print(f"- Monday integration data prepared")
 
         # Print final validation status
-        if not validation_result.get("valid", True):
+        if validation_result and not validation_result.get("valid", True):
             print(f"\nWARNING: Final schedule still has {len(validation_result['violations'])} constraint violations")
             print("Review the JSON output for details and consider manual adjustments")
     else:
