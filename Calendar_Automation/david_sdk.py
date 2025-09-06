@@ -35,6 +35,9 @@ def run_on_file(input_file_path):
             }
 
         # Run the appointment scheduler (OR-Tools version)
+        # TODO: availabilities is a list with one dude while two dudes should be there
+        # TODO: Afterwards in html creation we see only one unscheduled appointment while should be two
+        # TODO: logs: C:\Users\amirf\SchedulingAlgo\logs\Calendar_Automation\5115e475-42e1-4653-8edf-880f2938c2d9
         appointments, availabilities = ortools_scheduler(input_file_path, max_street_gap=30)
         with open(input_file_path, 'r') as f:
             data = json.load(f)
