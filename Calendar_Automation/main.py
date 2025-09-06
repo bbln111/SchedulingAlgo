@@ -1,6 +1,7 @@
 import logging
 import argparse
 import os
+import json
 
 from get_input_flow import collect_input_from_monday
 from david_sdk import run_on_file
@@ -51,7 +52,6 @@ def configure_argument_parser():
 
 def save_results_to_file(results, filename):
     """Save scheduling results to a JSON file"""
-    import json
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)

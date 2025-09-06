@@ -121,7 +121,7 @@ def update_client_appointments(client_id, appointments: list, monday_api):
     client_meetings = monday_api.get_meetings(client_id)
 
     for appointment in appointments:
-        if client_meetings == []:
+        if client_meetings is None or client_meetings == []:
             return
         meeting = client_meetings.pop(0)
 
@@ -147,6 +147,8 @@ def write_to_monday(data):
     for client_id in sorted_appointments.keys():
         client_appointment = sorted_appointments[client_id]
         update_client_appointments(client_id, client_appointment, monday_api)
+    # end for
+# end def
 
 
 if __name__ == '__main__':
